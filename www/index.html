@@ -1,0 +1,1497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="G2 Dash">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0E1215">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#E9EDF0">
+<title>G2 Dash</title>
+<meta name="description" content="Live e-scooter dashboard for VESC controllers: speed, battery, gears, speed limit and ride history.">
+<link rel="manifest" href="manifest.webmanifest">
+<script src="config.js" onerror="window.G2_CONFIG=window.G2_CONFIG||{}"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" defer></script>
+<link rel="icon" type="image/png" sizes="64x64" href="icons/favicon-64.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E9EDF0;--panel:#FFFFFF;--line:#D2D9DF;--ink:#101820;--muted:#5B6873;
+  --accent:#1FA64A;--accent-ink:#04140A;--hot:#D8372B;
+  --lcd:#05080A;--lcd2:#0B1115;--bezel:#1B2126;--seg:#EEF6F7;--ghost:rgba(238,246,247,.055);
+  --lcdlabel:#3EC3F2;--lcdgreen:#56E36F;--lcdamber:#FFC53D;--lcdred:#FF4D40;--lcdline:#2A3A44;
+  --or:#FF6B1F;--vb:#1C2127;--vb2:#252B33;
+  color-scheme:light;box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0E1215;--panel:#161C21;--line:#263038;--ink:#E8EEF1;--muted:#83919B;--accent:#56E36F;--bezel:#262E35;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0E1215;--panel:#161C21;--line:#263038;--ink:#E8EEF1;--muted:#83919B;--accent:#56E36F;--bezel:#262E35;color-scheme:dark}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;overflow:hidden;overscroll-behavior:none;scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%}
+body{margin:0;height:100%;overflow:hidden;position:relative;-webkit-touch-callout:none;touch-action:manipulation;background:var(--bg);color:var(--ink);font-family:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:16px;line-height:1.4;
+  -webkit-tap-highlight-color:transparent;overscroll-behavior:none;-webkit-user-select:none;user-select:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input,select{-webkit-user-select:text;user-select:text}
+.app{max-width:520px;margin:0 auto;padding:10px max(14px,env(safe-area-inset-right,0px)) calc(100px + env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px));
+  height:100%;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+img,svg,a{-webkit-user-drag:none;user-drag:none}
+input,select,textarea,#scanLog{-webkit-touch-callout:default}
+button{touch-action:manipulation;transition:transform .12s ease,opacity .12s ease,background-color .2s}
+button:active:not(:disabled){transform:scale(.97)}
+.btn.busy{pointer-events:none;opacity:.85}
+.btn.busy::before{content:"";width:16px;height:16px;border-radius:50%;border:2.5px solid currentColor;border-right-color:transparent;animation:spin .7s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ptr{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 62px);z-index:12;width:38px;height:38px;margin-left:-19px;border-radius:50%;background:var(--panel);border:1px solid var(--line);
+  box-shadow:0 6px 16px rgba(0,0,0,.25);display:grid;place-items:center;opacity:0;transform:translateY(-40px) scale(.6);pointer-events:none;transition:opacity .15s}
+.ptr svg{width:20px;height:20px;color:var(--accent)}
+.ptr.spin svg{animation:spin .7s linear infinite}
+.view.in-r{animation:slideR .26s cubic-bezier(.2,.8,.2,1)}.view.in-l{animation:slideL .26s cubic-bezier(.2,.8,.2,1)}
+@keyframes slideR{from{opacity:0;transform:translateX(28px)}}@keyframes slideL{from{opacity:0;transform:translateX(-28px)}}
+::view-transition-old(root){animation:.16s ease-out both vtOut}::view-transition-new(root){animation:.24s cubic-bezier(.2,.8,.2,1) both vtIn}
+@keyframes vtOut{to{opacity:0}}@keyframes vtIn{from{opacity:0;transform:translateY(8px)}}
+html .field select{-webkit-appearance:none;appearance:none;padding-right:30px;min-height:40px;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%2383919B' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 11px center;background-size:12px 8px;background-color:var(--panel)}
+.field input{min-height:40px}
+.iosban{display:none;position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px 40px 12px 14px;margin-bottom:12px;font-size:14px;line-height:1.45;color:var(--muted)}
+.iosban.show{display:block}
+.iosban b{color:var(--ink)}
+.iosban svg{width:16px;height:16px;vertical-align:-3px;color:var(--accent)}
+.iosban .x{position:absolute;top:6px;right:6px;width:32px;height:32px;border-radius:50%;font-size:20px;line-height:1;color:var(--muted)}
+.iosban .cp{margin-top:8px;padding:8px 12px;border-radius:10px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:14px}
+@media (orientation:landscape) and (max-height:520px){
+  .app{max-width:none;padding:6px max(14px,env(safe-area-inset-right)) 76px max(14px,env(safe-area-inset-left))}
+  #v-dash.active{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:0 16px;align-items:start}
+  #v-dash>#iosBan{display:none}
+  #v-dash>h3,#v-dash>.card{display:none}
+  .ctl{margin-top:0}
+  .bigs .bspd{height:30vh}
+  .bigs{padding:10px 14px 12px}
+  .wide .mid{min-height:90px}.wide .ws{height:84px}
+  .tabs button{padding:6px 0 4px;flex-direction:row;justify-content:center;gap:8px}
+}
+.view{display:none}.view.active{display:block}
+.cond{font-family:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif}
+
+/* ===== shared LCD bits ===== */
+.lab{color:var(--lcdlabel);font-weight:700;font-size:15px;letter-spacing:.04em;font-family:"Barlow Semi Condensed","Arial Narrow",sans-serif}
+.fault{display:none;margin-top:8px;background:rgba(255,77,64,.16);color:var(--lcdred);border-radius:10px;padding:8px 10px;font-weight:700;font-size:15px}
+
+/* ===== style 1: classic portrait LCD ===== */
+.unit{background:linear-gradient(160deg,color-mix(in srgb,var(--bezel) 70%,#fff 8%),var(--bezel) 40%,color-mix(in srgb,var(--bezel) 85%,#000));border-radius:30px;padding:9px;box-shadow:0 18px 40px -22px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.08)}
+.lcd{box-shadow:inset 0 0 0 1px rgba(255,255,255,.05),inset 0 10px 30px rgba(0,0,0,.6);background:radial-gradient(120% 80% at 50% 0%,var(--lcd2),var(--lcd) 70%);border-radius:22px;padding:14px 16px 12px;color:var(--seg);font-family:"Barlow Semi Condensed","Arial Narrow",sans-serif;position:relative;overflow:hidden}
+.lcd::after{content:"";position:absolute;inset:0;border-radius:22px;pointer-events:none;background:linear-gradient(160deg,rgba(255,255,255,.06),transparent 38%)}
+.sbar{display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:14px;opacity:.92}
+.icons{display:flex;gap:10px;align-items:center}
+.icons svg{width:18px;height:18px}
+.off{opacity:.16}
+.bt{color:var(--lcdlabel)}
+.energy{margin-top:8px}.energy .row{display:flex;justify-content:space-between;align-items:flex-end}
+.ebar{display:flex;gap:3px;align-items:flex-end;height:22px;margin-top:5px}
+.ebar i{flex:1;background:var(--ghost);border-radius:1px}
+.ebar i.on{background:var(--acc);box-shadow:0 0 8px color-mix(in srgb,var(--acc) 55%,transparent)}.ebar.low i.on{background:var(--lcdamber)}.ebar.crit i.on{background:var(--lcdred)}
+.pct{width:56px;height:22px}
+.spd{position:relative;aspect-ratio:320/178;margin-top:4px}
+.spd svg{position:absolute;inset:0;width:100%;height:100%}
+.spd .lab{position:absolute;left:42%;top:24%}
+.spd .kmh{position:absolute;right:3%;top:76%;font-weight:600;font-size:16px}
+.gearrow{display:flex;align-items:center;gap:8px;border-top:1px solid var(--lcdline);padding-top:6px}
+.gearrow .gs{width:24px;height:36px}
+.gearrow .mname{color:var(--lcdlabel);font-weight:600;font-size:15px}
+.gearrow .mot{margin-left:auto;font-weight:700;font-size:13px;border:1.5px solid var(--lcdline);border-radius:6px;padding:1px 6px}
+.gearrow .mot.d{border-color:var(--lcdgreen);color:var(--lcdgreen)}
+.gearrow .pw{font-size:14px;font-weight:600;min-width:62px;text-align:right}
+.gearrow .pw.regen{color:var(--lcdlabel)}
+.odo{border-top:1px solid var(--lcdline);margin-top:8px;padding-top:6px;width:100%;text-align:left;display:block}
+.odo .hd{display:flex;justify-content:space-between;align-items:baseline}.odo .hint{font-size:12px;opacity:.45}
+.odo .r{display:flex;align-items:flex-end;gap:8px}.odo svg{flex:1;height:56px}.odo .u{font-weight:600;font-size:18px;padding-bottom:6px}
+.mini{display:grid;grid-template-columns:repeat(3,1fr);margin-top:10px}
+.mini .c{padding:8px 6px 6px;border-top:1px solid var(--lcdline)}
+.mini .c:not(:nth-child(3n+1)){border-left:1px solid var(--lcdline)}
+.mini .lab{font-size:12px;display:flex;justify-content:space-between}.mini .lab b{color:var(--seg);opacity:.55;font-weight:600}
+.mini svg{display:block;width:100%;height:30px;margin-top:3px}
+
+/* ===== style 2: wide cockpit ===== */
+.wide{position:relative;margin-top:22px;padding:10px 10px 10px;background:linear-gradient(#2A3036,#15191D);border-radius:22px 22px 28px 28px}
+.wide::before{content:"";position:absolute;left:12%;right:12%;top:-20px;height:22px;background:#2A3036;clip-path:polygon(10% 0,90% 0,100% 100%,0 100%)}
+.wide .scr{background:#030506;border-radius:12px 12px 20px 20px;padding:10px 12px 10px;color:#F2F4F5;font-family:"Barlow Semi Condensed","Arial Narrow",sans-serif;position:relative}
+.wide .tri{position:absolute;top:8px;width:0;height:0;border-style:solid;opacity:.12}
+.wide .tri.l{left:10px;border-width:10px 0 0 10px;border-color:var(--or) transparent transparent var(--or)}
+.wide .tri.r{right:10px;border-width:10px 10px 0 0;border-color:var(--or) var(--or) transparent transparent}
+.wide .tri.on{opacity:1;animation:blink .6s steps(2) infinite}
+@keyframes blink{50%{opacity:.15}}
+.wide .mid{display:grid;grid-template-columns:72px 1fr 52px;align-items:center;gap:6px;min-height:118px;padding-top:14px}
+.wide .ics{display:grid;grid-template-columns:repeat(2,26px);gap:8px 8px;padding-left:6px}
+.wide .ics svg{width:22px;height:22px}
+.wide .ws{height:108px;width:100%}
+.wide .uu{display:flex;flex-direction:column;gap:2px;font-weight:600;font-size:15px}
+.wide .uu span{opacity:.25}.wide .uu span.on{opacity:1}
+.wide .info{position:absolute;right:30px;top:6px;font-size:13px;font-weight:600;opacity:.7;display:flex;gap:10px}
+.wide .bot{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:center;margin-top:4px}
+.wide .modeline{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--or);font-weight:600}
+.wide .pill{background:var(--or);color:#140600;font-weight:700;font-size:12px;border-radius:4px;padding:0 8px;letter-spacing:.04em}
+.wide .mm{font-size:12px;color:#F2F4F5;opacity:.75;font-weight:700}
+.wide .batt{display:flex;align-items:center;gap:6px}
+.wide .batt svg.z{width:16px;height:16px;color:var(--or)}
+.wide .bb{display:flex;gap:2px;height:14px;align-items:stretch}
+.wide .bb i{width:7px;background:rgba(255,107,31,.12);border-radius:1px}.wide .bb i.on{background:var(--or);box-shadow:0 0 6px color-mix(in srgb,var(--or) 60%,transparent)}
+.wide .bb.crit i.on{background:var(--lcdred)}
+.wide .od{display:flex;align-items:center;gap:6px}.wide .od svg{height:20px;width:96px}.wide .od span{font-size:11px;line-height:1;font-weight:600;opacity:.8}
+.wide .btns{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.wide .btns button{border:1.5px solid rgba(242,244,245,.35);border-radius:999px;padding:6px 0;font-size:14px;font-weight:600;color:#F2F4F5;font-family:inherit}
+.wide .btns button:active{background:rgba(242,244,245,.12)}
+.wide .btns button.on{border-color:var(--or);color:var(--or)}
+.wide .mounts{display:flex;justify-content:space-between;padding:0 18%;margin-top:-2px}
+.wide .mounts i{width:12px;height:6px;background:#2A3036;border-radius:0 0 4px 4px}
+.under{display:grid;grid-template-columns:repeat(4,1fr);margin-top:12px;border-top:1px solid var(--line)}
+.under div{padding:10px 4px;border-bottom:1px solid var(--line)}
+.under div+div{border-left:1px solid var(--line);padding-left:10px}
+.under label{display:block;font-size:12px;color:var(--muted)}
+.under b{font-family:"Barlow Semi Condensed",sans-serif;font-size:22px;font-variant-numeric:tabular-nums}
+.under b small{font-family:"Barlow",sans-serif;font-size:12px;color:var(--muted);font-weight:500;margin-left:2px}
+
+/* ===== style 3: VESC data ===== */
+.vesc{background:var(--vb);border-radius:20px;padding:12px;color:#E6EAEE;font-family:"Barlow Semi Condensed","Arial Narrow",sans-serif}
+.vesc .vh{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;color:#9AA6B2;padding:0 2px 8px}
+.vesc .vh b{color:#E6EAEE}
+.vesc .vh .st{display:flex;align-items:center;gap:6px}
+.vesc .vh .st i{width:8px;height:8px;border-radius:50%;background:#FFB74D}.vesc .vh .st i.live{background:#81C784}
+.vgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.vg{background:var(--vb2);border-radius:14px;padding:6px 4px 2px;text-align:center}
+.vg.big{grid-column:span 2;grid-row:span 2;display:flex;flex-direction:column;justify-content:center}
+.vg svg{display:block;width:100%;height:auto}
+.vtab{width:100%;border-collapse:collapse;margin-top:10px;font-size:15px;font-variant-numeric:tabular-nums}
+.vtab th{color:#9AA6B2;font-weight:600;text-align:right;padding:5px 6px;font-size:13px}
+.vtab th:first-child,.vtab td:first-child{text-align:left}
+.vtab td{text-align:right;padding:6px;border-top:1px solid #333B45;font-weight:600}
+.vtab td.dim{color:#5E6873}
+.vstrip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+.vstrip div{background:var(--vb2);border-radius:12px;padding:7px 9px}
+.vstrip label{display:block;font-size:12px;color:#9AA6B2;font-weight:600}
+.vstrip b{font-size:19px;font-variant-numeric:tabular-nums}
+.vstrip b small{font-size:12px;color:#9AA6B2;margin-left:2px}
+
+/* ===== beta ===== */
+.beta{font-size:11px;font-weight:700;color:var(--accent-ink);background:var(--lcdamber);border-radius:5px;padding:1px 6px;margin-left:6px;vertical-align:2px}
+#scanLog{max-height:280px;min-height:60px;overflow:auto;background:#05080A;color:#9FE6B0;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;padding:10px;border-radius:12px;white-space:pre-wrap;word-break:break-all;margin:8px 0 0;-webkit-user-select:text;user-select:text}
+.scanrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}.scanrow .btn{margin-top:8px}
+.scanst{font-size:14px;margin-top:10px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.scanst i{width:8px;height:8px;border-radius:50%;background:var(--muted)}.scanst i.on{background:var(--lcdred);animation:blink 1s steps(2) infinite}
+/* ===== speed limit ===== */
+.limrow{display:grid;grid-template-columns:1fr 48px 48px auto;gap:8px;align-items:center;margin-top:10px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:8px 8px 8px 14px}
+.limrow label{font-size:12px;color:var(--muted);font-weight:600;display:block}
+.limrow b{font-family:"Barlow Semi Condensed",sans-serif;font-size:24px;font-variant-numeric:tabular-nums;line-height:1.1}
+.limrow b small{font-family:"Barlow",sans-serif;font-size:13px;color:var(--muted);font-weight:500;margin-left:3px}
+.limrow .lb{height:44px;border-radius:12px;border:1px solid var(--line);font-size:24px;font-weight:600;touch-action:manipulation}
+.limrow .lb:active{transform:scale(.94)}
+.applyb{padding:0 16px;height:44px;border-radius:12px;background:var(--accent);color:var(--accent-ink);font-weight:700}
+.applyb[hidden]{display:none}
+.limtag{font-size:12px;font-weight:700;border:1.5px solid var(--lcdamber);color:var(--lcdamber);border-radius:6px;padding:0 6px;margin-left:6px}
+/* ===== VESC style polish ===== */
+.vesc{background:linear-gradient(180deg,#20262D,#171B20);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.vg{background:linear-gradient(180deg,#262D35,#20262D);border:1px solid #2E3640}
+.vtab td.w{color:#FFB74D}.vtab td.h{color:#FF6B5E}
+.vbars{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.vbar{background:var(--vb2);border-radius:12px;padding:7px 10px}
+.vbar label{display:flex;justify-content:space-between;font-size:12px;color:#9AA6B2;font-weight:600}
+.vbar label b{color:#E6EAEE;font-size:13px}
+.vbar .t{height:6px;border-radius:3px;background:#333B45;margin-top:6px;overflow:hidden}
+.vbar .t i{display:block;height:100%;border-radius:3px;transition:width .3s}
+/* ===== controls ===== */
+.ctl{margin-top:14px}
+.ctrow{display:grid;grid-template-columns:1.2fr 1fr;gap:10px}
+.grp label{display:block;font-size:12px;color:var(--muted);font-weight:600;margin:0 0 4px 4px}
+.segs{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--line);border-radius:14px;padding:3px;gap:3px;background:var(--panel)}
+.segs button{padding:10px 0;border-radius:11px;font-weight:700;color:var(--muted);font-size:15px}
+.segs button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.segs button:disabled{opacity:.35;cursor:not-allowed}
+.throttle{display:block;width:100%;margin-top:10px;padding:18px;border-radius:18px;background:var(--panel);border:1.5px dashed var(--accent);color:var(--accent);font-weight:700;font-size:17px;touch-action:none}
+.throttle.on{background:var(--accent);color:var(--accent-ink);border-style:solid}
+.chips{display:flex;gap:8px;margin-top:10px}
+.chip{flex:1;padding:11px 0;border-radius:14px;border:1px solid var(--line);background:var(--panel);font-weight:600;font-size:15px;color:var(--muted)}
+.chip[aria-pressed="true"]{color:var(--ink);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.note{font-size:14px;color:var(--muted);line-height:1.5}.note b{color:var(--ink)}
+.cnote{font-size:13px;color:var(--muted);text-align:center;margin:10px 0 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:12px}
+.gh{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:6px}
+.k{display:inline-flex;align-items:center;gap:6px;margin-left:10px}.k::before{content:"";width:10px;height:3px;border-radius:2px;background:var(--c)}
+canvas{display:block;width:100%;height:120px}
+
+/* ===== ride + settings ===== */
+h2{font-family:"Barlow Semi Condensed",sans-serif;font-size:30px;margin:8px 0 12px;font-weight:700}
+h3{font-size:15px;margin:26px 0 8px;color:var(--muted);font-weight:600}
+.stats{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line);margin-bottom:14px}
+.stt{padding:12px 0;border-bottom:1px solid var(--line)}
+.stt:nth-child(odd){border-right:1px solid var(--line);padding-right:12px}.stt:nth-child(even){padding-left:14px}
+.stt label{display:block;font-size:13px;color:var(--muted)}
+.stt .v{font-family:"Barlow Semi Condensed",sans-serif;font-size:34px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.stt .v small{font-family:"Barlow",sans-serif;font-size:14px;font-weight:500;color:var(--muted);margin-left:3px}
+.btn{display:block;width:100%;padding:14px;border-radius:14px;font-weight:600;text-align:center;margin-top:10px;border:1px solid var(--line);background:var(--panel)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.danger{color:var(--hot)}
+.bwrap{position:relative;margin:0 0 10px}
+.brands{display:flex;gap:6px;overflow-x:auto;overflow-y:hidden;padding:2px 2px 10px;scroll-behavior:smooth;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;touch-action:pan-x;
+  scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--accent) 70%,transparent) var(--line);cursor:grab}
+.brands.drag{cursor:grabbing;scroll-behavior:auto;scroll-snap-type:none}
+.brands button{scroll-snap-align:start}
+.brands::-webkit-scrollbar{height:5px}
+.brands::-webkit-scrollbar-track{background:var(--line);border-radius:3px}
+.brands::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--accent) 75%,transparent);border-radius:3px}
+.bwrap::before,.bwrap::after{content:"";position:absolute;top:0;bottom:10px;width:46px;pointer-events:none;z-index:1;transition:opacity .2s}
+.bwrap::before{left:0;background:linear-gradient(90deg,var(--bg) 30%,transparent)}
+.bwrap::after{right:0;background:linear-gradient(270deg,var(--bg) 30%,transparent)}
+.bwrap.at-start::before,.bwrap.at-end::after{opacity:0}
+.barr{position:absolute;top:calc(50% - 5px);transform:translateY(-50%);z-index:2;width:44px;height:44px;border-radius:50%;background:var(--panel);border:1px solid var(--line);
+  display:grid;place-items:center;color:var(--ink);box-shadow:0 4px 12px rgba(0,0,0,.25);transition:opacity .2s}
+.barr svg{width:16px;height:16px}
+.barr.l{left:-4px}.barr.r{right:-4px}
+.bwrap.at-start .barr.l,.bwrap.at-end .barr.r{opacity:0;pointer-events:none}
+.brands button{flex:none;padding:9px 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel);font-weight:600;font-size:14px;color:var(--muted)}
+.brands button[aria-pressed="true"]{color:var(--accent-ink);background:var(--accent);border-color:var(--accent)}
+.models{display:grid;gap:8px}
+.myveh{display:grid;grid-template-columns:120px 1fr;gap:14px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:12px;margin-bottom:12px}
+.mvimg{width:120px;height:96px;border-radius:14px;background:color-mix(in srgb,var(--ink) 6%,var(--panel)) center/cover no-repeat;display:grid;place-items:center;color:var(--muted)}
+.mvimg svg{width:96px;height:60px;opacity:.8}
+.mvtx{min-width:0}.mvtx b{display:block;font-family:"Barlow Semi Condensed",sans-serif;font-size:21px;line-height:1.15}
+.mvtx span{display:block;font-size:13px;color:var(--muted);margin-top:2px}
+.mvbtns{display:flex;gap:6px;margin-top:10px}.mvbtns .btn{margin:0;padding:9px 12px;font-size:14px;width:auto;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.mvbtns svg{width:18px;height:18px}
+.mvbtns .btn[hidden]{display:none}
+.mvtx .mvbtns span{display:inline;color:inherit;font-size:inherit;margin:0}
+.mcard .th.ph{background:center/cover no-repeat}
+.mrow{display:grid;grid-template-columns:1fr 48px;gap:6px}
+.mcard{text-align:left;border:1px solid var(--line);border-radius:14px;padding:11px 14px;background:var(--panel);display:flex;justify-content:space-between;align-items:center;gap:12px;min-width:0}
+.mcard>div{flex:1;min-width:0}
+.mcard .th{flex:none;width:62px;height:44px;border-radius:10px;background:color-mix(in srgb,var(--ink) 6%,var(--panel));display:grid;place-items:center;color:var(--ink)}
+.mcard .th svg{width:56px;height:36px;opacity:.85}
+.mcard[aria-pressed="true"] .th{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--panel))}
+.mcard[aria-pressed="true"] .th svg{opacity:1}
+.mphoto{display:grid;place-items:center;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--muted);text-decoration:none}
+.mphoto svg{width:22px;height:22px}
+.mphoto:active{transform:scale(.95)}
+.mcard[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.mcard b{font-family:"Barlow Semi Condensed",sans-serif;font-size:19px}
+.mcard span{display:block;font-size:13px;color:var(--muted)}
+.mcard em{font-style:normal;font-family:"Barlow Semi Condensed",sans-serif;font-weight:700;font-size:20px;white-space:nowrap}
+.styles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.p4::before{left:22%;top:12%;width:56%;height:30px;border:5px solid #EEF6F7;border-radius:3px}
+.p4::after{left:14%;bottom:8px;width:72%;height:5px;background:#56E36F;border-radius:3px}
+.search{width:100%;padding:11px 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;margin-bottom:10px}
+.conn{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.conn .btn.ctile{flex-direction:column;gap:3px;padding:14px 6px 12px;min-height:100px;border-radius:18px;text-align:center}
+.conn .btn.ctile svg{width:26px;height:26px;margin-bottom:4px}
+.conn .btn.ctile b{font-size:15.5px;font-weight:700;line-height:1.1}
+.conn .btn.ctile small{font-size:12px;font-weight:500;line-height:1.25;opacity:.72}
+.conn .btn.ctile.busy svg{display:none}
+.how{margin-top:10px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:0 14px}
+.how summary{list-style:none;cursor:pointer;padding:12px 0;font-weight:600;font-size:15px;display:flex;justify-content:space-between;align-items:center}
+.how summary::-webkit-details-marker{display:none}
+.how summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg) translateY(-3px);transition:transform .2s}
+.how[open] summary::after{transform:rotate(-135deg) translateY(-2px)}
+.how .note{margin:0 0 12px}
+.stats{gap:8px;border-top:0!important}
+.stt{background:var(--panel);border:1px solid var(--line)!important;border-radius:16px;padding:12px 14px!important}
+.stt:first-child{grid-column:1/-1;padding:16px 16px!important;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 16%,var(--panel)),var(--panel))}
+.stt:first-child .v{font-size:52px}
+.empty{text-align:center;padding:28px 16px;color:var(--muted)}
+.empty svg{width:56px;height:56px;color:var(--accent);opacity:.8;margin-bottom:8px}
+#catSeg button{display:flex;align-items:center;justify-content:center;gap:8px}#catSeg svg{width:22px;height:22px}
+.empty b{display:block;color:var(--ink);font-size:16px;margin-bottom:4px}
+.mcard[aria-pressed="true"] em::after{content:"";display:inline-block;width:6px;height:11px;border-right:2.5px solid var(--accent);border-bottom:2.5px solid var(--accent);transform:rotate(45deg);margin-left:10px;vertical-align:2px}.conn .btn{margin-top:0;display:flex;align-items:center;justify-content:center;gap:8px}
+.conn .btn svg{width:18px;height:18px}.conn .btn:disabled{opacity:.4}
+.hist{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:0 14px}
+.hist .hrow:last-child{border-bottom:0}
+.hrow{display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+.hrow b{display:block;font-size:15px}.hrow span{font-size:13px;color:var(--muted)}
+.hrow .r{text-align:right}.hrow .r b{font-family:"Barlow Semi Condensed",sans-serif;font-size:20px;font-variant-numeric:tabular-nums}
+#disp{--acc:var(--lcdgreen)}
+.bigs{box-shadow:inset 0 0 0 1px rgba(255,255,255,.05),0 18px 40px -22px rgba(0,0,0,.6);background:radial-gradient(120% 80% at 50% 0%,var(--lcd2),var(--lcd) 70%);border-radius:26px;padding:14px 16px 16px;color:var(--seg);font-family:"Barlow Semi Condensed","Arial Narrow",sans-serif;border:9px solid var(--bezel)}
+.bigs .t{display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:15px}
+.bigs .gr{display:flex;align-items:center;gap:8px}
+.bigs .gn{font-size:26px;font-weight:700;color:var(--acc);line-height:1}
+.bigs .mo{font-size:13px;font-weight:700;border:1.5px solid currentColor;border-radius:6px;padding:0 6px;opacity:.8}
+.bigs .bspd{display:block;width:100%;height:clamp(150px,48vw,220px);margin:6px 0 0}
+.bigs .bu{text-align:right;font-weight:600;font-size:17px;margin-top:-4px;opacity:.8}
+.bigs .bar{height:14px;border-radius:7px;background:var(--ghost);overflow:hidden;margin-top:10px}
+.bigs .bar i{display:block;height:100%;background:linear-gradient(90deg,color-mix(in srgb,var(--acc) 65%,#000),var(--acc));border-radius:7px;transition:width .4s;box-shadow:0 0 12px color-mix(in srgb,var(--acc) 55%,transparent)}
+.bigs .bar.crit i{background:var(--lcdred)}
+.bigs .row{display:flex;justify-content:space-between;margin-top:8px;font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
+.bigs .row small{font-size:13px;opacity:.6;margin-left:2px}
+.scard{border:1px solid var(--line);border-radius:14px;padding:8px;background:var(--panel);text-align:center;font-weight:600;font-size:14px}
+.scard[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.scard i{display:block;height:58px;border-radius:9px;margin-bottom:6px;background:#05080A;position:relative;overflow:hidden}
+.scard i::before,.scard i::after{content:"";position:absolute}
+.p1::before{left:22%;top:12%;width:56%;height:6px;background:repeating-linear-gradient(90deg,#56E36F 0 4px,transparent 4px 6px)}
+.p1::after{left:28%;top:32%;width:44%;height:26px;border:4px solid #EEF6F7;border-radius:3px;border-right:0}
+.p2{clip-path:polygon(14% 0,86% 0,100% 30%,100% 100%,0 100%,0 30%)}
+.p2::before{left:36%;top:22%;width:28%;height:26px;border:4px solid #F2F4F5;border-bottom:0}
+.p2::after{left:12%;bottom:10px;width:40%;height:6px;background:repeating-linear-gradient(90deg,#FF6B1F 0 4px,transparent 4px 6px)}
+.p3{background:#1C2127!important}
+.p3::before{left:10%;top:14%;width:44px;height:44px;border-radius:50%;border:5px solid #4FC3F7;border-bottom-color:transparent}
+.p3::after{right:12%;top:18%;width:24px;height:24px;border-radius:50%;border:4px solid #81C784;border-bottom-color:transparent}
+.field{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);gap:12px}
+.field>label small{display:block;color:var(--muted);font-size:12px}
+.field input,.field select{width:112px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;text-align:right}
+.field select{width:auto;min-width:112px;max-width:170px}
+.trip3{display:flex;gap:6px}.trip3 input{width:58px;padding:8px 4px;text-align:center}
+.field.col{flex-direction:column;align-items:stretch}.field.col .seg2{display:grid;grid-auto-columns:1fr}
+.seg2{display:inline-grid;grid-auto-flow:column;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg2 button{padding:8px 14px;font-weight:600;color:var(--muted)}
+.seg2 button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.sw{width:52px;height:44px;position:relative;flex:none;background:transparent}
+.sw::before{content:"";position:absolute;left:1px;top:7px;width:50px;height:30px;border-radius:15px;background:var(--line);transition:background .2s}
+.sw::after{content:"";position:absolute;top:10px;left:4px;width:24px;height:24px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.sw[aria-checked="true"]::before{background:var(--accent)}.sw[aria-checked="true"]::after{left:24px}
+ol.note{padding-left:20px;margin:6px 0}
+.warn{border-left:3px solid var(--hot);padding:2px 0 2px 10px;margin-top:8px}
+
+.tabs{position:fixed;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);z-index:10}
+.tabs .in{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);padding:0 env(safe-area-inset-right,0px) 0 env(safe-area-inset-left,0px)}
+.tabs button{padding:10px 0 8px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:12px;color:var(--muted);font-weight:600}
+.tabs button svg{width:56px;height:30px;padding:3px 16px;border-radius:15px;transition:background .2s}
+.tabs button[aria-selected="true"]{color:var(--accent)}.tabs button[aria-selected="true"] svg{background:color-mix(in srgb,var(--accent) 18%,transparent)}
+/* ===== app shell ===== */
+.appbar{position:sticky;top:0;z-index:9;display:flex;align-items:center;gap:10px;margin:-10px -14px 8px;padding:10px 14px 8px;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:saturate(1.4) blur(16px);-webkit-backdrop-filter:saturate(1.4) blur(16px)}
+.lg{width:36px;height:36px;border-radius:10px;overflow:hidden;flex:none;box-shadow:0 3px 10px rgba(0,0,0,.28)}
+.lg svg{display:block;width:100%;height:100%}
+.appbar .tt{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+.appbar .tt b{font-family:"Barlow Semi Condensed",sans-serif;font-size:21px;font-weight:700}
+.appbar .tt span{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;border:1px solid var(--line);border-radius:999px;padding:7px 12px;background:var(--panel);flex:none}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--lcdamber)}.pill i.live{background:#3DDC84;box-shadow:0 0 0 4px rgba(61,220,132,.2)}
+.view>h2{display:none}
+.view.active{animation:none}@keyframes vin{from{opacity:0;transform:translateY(6px)}}
+.group{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:0 14px;margin-top:4px}
+.group .field:last-child{border-bottom:0}
+.onb{position:fixed;inset:0;z-index:30;background:radial-gradient(120% 60% at 50% 0%,color-mix(in srgb,var(--accent) 10%,var(--bg)),var(--bg) 60%);display:flex;align-items:center;justify-content:center;overflow:auto;
+  padding:calc(24px + env(safe-area-inset-top,0px)) 22px calc(24px + env(safe-area-inset-bottom,0px))}
+.onb[hidden]{display:none}
+.onbc{max-width:400px;width:100%;text-align:center;animation:vin .4s ease-out}
+.onlogo{width:116px;height:116px;margin:0 auto 18px;border-radius:27px;overflow:hidden;box-shadow:0 22px 44px -18px rgba(0,0,0,.65)}
+.onlogo svg{display:block;width:100%;height:100%}
+.onb h1{font-family:"Barlow Semi Condensed",sans-serif;font-size:38px;margin:0;font-weight:700;line-height:1}
+.onb p{color:var(--muted);margin:10px auto 0;max-width:320px}
+.feat{text-align:left;margin:24px 0 18px;display:grid;gap:10px}
+.feat div{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;font-size:15px}
+.feat div b{display:block}.feat div span{font-size:13px;color:var(--muted)}
+.feat svg{width:26px;height:26px;color:var(--accent);flex:none}
+@media (min-width:960px){
+  .app{max-width:1200px;padding:16px 32px 40px 124px}
+  .appbar{margin:-16px 0 14px;padding:14px 0 10px}
+  .tabs{left:0;top:0;bottom:0;right:auto;width:96px;border-top:0;border-right:1px solid var(--line);padding:calc(18px + env(safe-area-inset-top,0px)) 0 0}
+  .tabs .in{display:flex;flex-direction:column;gap:8px;max-width:none}
+  #v-dash.active{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);grid-template-rows:auto auto auto 1fr;gap:0 32px;align-items:start}
+  #v-dash>#iosBan{display:none}
+  #v-dash>#disp{grid-column:1;grid-row:1 / span 4}
+  #v-dash>.ctl,#v-dash>h3,#v-dash>.card{grid-column:2}
+  #v-dash>.ctl{margin-top:0}
+  #v-stats.active,#v-set.active{max-width:760px}
+  .toast{bottom:28px}
+}
+.abBack{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;margin-left:-6px;flex:none;color:var(--ink)}
+.abBack[hidden]{display:none}.abBack svg{width:24px;height:24px}
+.navrow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px 14px;margin-top:4px;min-height:60px}
+.navrow .nt{flex:1;min-width:0}.navrow b{display:block;font-size:16px}.navrow small{display:block;color:var(--muted);font-size:13px}
+.navrow>svg{width:20px;height:20px;color:var(--muted);flex:none}
+.av{width:38px;height:38px;border-radius:50%;background:color-mix(in srgb,var(--accent) 22%,var(--panel));color:var(--accent);display:grid;place-items:center;font-weight:700;flex:none;font-family:"Barlow Semi Condensed",sans-serif;font-size:17px}
+.av.big{width:72px;height:72px;font-size:28px;margin:0 auto 10px}
+.achero{text-align:center;padding:18px 10px 14px}.achero b{display:block;font-size:20px;font-family:"Barlow Semi Condensed",sans-serif}.achero span{display:block;color:var(--muted);font-size:14px;margin-top:4px}
+.acform{padding:4px 14px}.acf{display:block;padding:10px 0;border-bottom:1px solid var(--line)}.acf:last-child{border-bottom:0}
+.acf span{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px}
+.acf input{width:100%;border:0;background:transparent;color:var(--ink);font:inherit;font-size:17px;padding:4px 0;outline:none}
+.btn:disabled,.linkbtn:disabled{opacity:.45;cursor:not-allowed}
+.linkbtn{display:block;margin:12px auto 0;color:var(--accent);font-weight:600;padding:10px;min-height:44px}
+.sheetbg{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;animation:fadeIn .2s ease}
+.sheetbg[hidden]{display:none}
+.sheet{width:100%;max-width:520px;background:var(--panel);border-radius:22px 22px 0 0;padding:10px 18px calc(18px + env(safe-area-inset-bottom,0px));box-shadow:0 -10px 40px rgba(0,0,0,.35);animation:sheetUp .28s cubic-bezier(.2,.8,.2,1)}
+.sheet .grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 14px}
+.sheet h4{margin:0;font-family:"Barlow Semi Condensed",sans-serif;font-size:22px}
+.sheet p{color:var(--muted);margin:6px 0 14px;font-size:15px}
+.btn.dangerfill{background:var(--hot);border-color:var(--hot);color:#fff}
+@keyframes sheetUp{from{transform:translateY(100%)}}@keyframes fadeIn{from{opacity:0}}
+@media (min-width:960px){.sheetbg{align-items:center}.sheet{border-radius:22px;max-width:420px}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.chip,.segs button,.seg2 button,.brands button{min-height:44px}
+.seg2 button{min-width:44px}
+.pill{min-height:44px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:.25s;pointer-events:none;max-width:90vw;z-index:20}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="logoSym" viewBox="0 0 1024 1024"><defs><radialGradient id="lgbg" cx="50%" cy="30%" r="80%"><stop offset="0" stop-color="#15222C"/><stop offset=".65" stop-color="#070B0E"/><stop offset="1" stop-color="#05080A"/></radialGradient></defs><rect width="1024" height="1024" fill="url(#lgbg)"/><g transform="translate(0.0 0.0) scale(1.0)"><polygon points="122.1,473.3 137.2,433.8 201.2,462.1 188.6,494.9" fill="#56E36F"/><polygon points="143.5,420.3 164.0,383.2 224.8,421.1 207.8,451.7" fill="#56E36F"/><polygon points="172.1,370.7 197.6,336.9 253.7,383.9 232.8,411.7" fill="#56E36F"/><polygon points="207.3,325.7 237.2,295.7 287.4,351.2 262.9,375.7" fill="#56E36F"/><polygon points="248.5,285.9 282.3,260.4 325.1,323.7 297.6,344.4" fill="#56E36F"/><polygon points="294.7,252.3 331.8,231.7 366.0,301.8 336.1,318.4" fill="#56E36F"/><polygon points="345.2,225.4 384.8,210.2 409.5,285.9 377.6,298.2" fill="#56E36F"/><polygon points="399.0,205.9 440.2,196.3 454.5,276.3 421.4,283.9" fill="#56E36F"/><polygon points="454.9,194.0 497.1,190.3 500.1,273.0 466.5,276.0" fill="#56E36F"/><polygon points="512.0,190.0 554.3,192.2 545.6,276.1 512.0,274.4" fill="#56E36F"/><polygon points="569.1,194.0 610.6,202.0 589.9,285.5 557.1,279.2" fill="#FFC53D"/><polygon points="625.0,205.9 665.1,219.6 632.4,300.9 600.9,290.1" fill="#FFC53D"/><polygon points="678.8,225.4 716.5,244.6 672.0,322.0 642.5,306.9" fill="#FFC53D"/><polygon points="729.3,252.3 764.0,276.6 708.2,348.2 681.2,329.3" fill="#FF7A3D"/><polygon points="775.5,285.9 806.5,314.8 740.2,379.1 716.1,356.7" fill="#16241C"/><polygon points="816.7,325.7 843.4,358.5 767.4,413.9 746.8,388.6" fill="#16241C"/><polygon points="851.9,370.7 873.7,407.0 789.4,452.0 772.6,424.2" fill="#16241C"/><polygon points="880.5,420.3 897.1,459.2 805.8,492.6 793.1,462.9" fill="#16241C"/><g transform="translate(291 448) scale(3.3) skewX(-7)"><polygon points="29.0,50.0 34.5,44.5 43.5,44.5 49.0,50.0 43.5,55.5 34.5,55.5" fill="#EEF6F7" transform="translate(6 0)"/><polygon points="7.0,5.5 12.5,0.0 43.5,0.0 49.0,5.5 43.5,11.0 12.5,11.0" fill="#EEF6F7" transform="translate(6 0)"/><polygon points="7.0,94.5 12.5,89.0 43.5,89.0 49.0,94.5 43.5,100.0 12.5,100.0" fill="#EEF6F7" transform="translate(6 0)"/><polygon points="5.5,7.0 11.0,12.5 11.0,43.0 5.5,48.5 0.0,43.0 0.0,12.5" fill="#EEF6F7" transform="translate(6 0)"/><polygon points="50.5,7.0 56.0,12.5 56.0,43.0 50.5,48.5 45.0,43.0 45.0,12.5" fill="rgba(238,246,247,0.07)" transform="translate(6 0)"/><polygon points="5.5,51.5 11.0,57.0 11.0,87.5 5.5,93.0 0.0,87.5 0.0,57.0" fill="#EEF6F7" transform="translate(6 0)"/><polygon points="50.5,51.5 56.0,57.0 56.0,87.5 50.5,93.0 45.0,87.5 45.0,57.0" fill="#EEF6F7" transform="translate(6 0)"/><polygon points="7.0,5.5 12.5,0.0 43.5,0.0 49.0,5.5 43.5,11.0 12.5,11.0" fill="#EEF6F7" transform="translate(78 0)"/><polygon points="7.0,50.0 12.5,44.5 43.5,44.5 49.0,50.0 43.5,55.5 12.5,55.5" fill="#EEF6F7" transform="translate(78 0)"/><polygon points="7.0,94.5 12.5,89.0 43.5,89.0 49.0,94.5 43.5,100.0 12.5,100.0" fill="#EEF6F7" transform="translate(78 0)"/><polygon points="5.5,7.0 11.0,12.5 11.0,43.0 5.5,48.5 0.0,43.0 0.0,12.5" fill="rgba(238,246,247,0.07)" transform="translate(78 0)"/><polygon points="50.5,7.0 56.0,12.5 56.0,43.0 50.5,48.5 45.0,43.0 45.0,12.5" fill="#EEF6F7" transform="translate(78 0)"/><polygon points="5.5,51.5 11.0,57.0 11.0,87.5 5.5,93.0 0.0,87.5 0.0,57.0" fill="#EEF6F7" transform="translate(78 0)"/><polygon points="50.5,51.5 56.0,57.0 56.0,87.5 50.5,93.0 45.0,87.5 45.0,57.0" fill="rgba(238,246,247,0.07)" transform="translate(78 0)"/></g></g></symbol></svg>
+<div class="onb" id="onb" hidden role="dialog" aria-modal="true" aria-labelledby="onbTitle"><div class="onbc">
+  <div class="onlogo"><svg viewBox="0 0 1024 1024"><use href="#logoSym"/></svg></div>
+  <h1 id="onbTitle">G2 Dash</h1>
+  <p>A live dashboard for your e-scooter: speed, battery, gears, speed limit and ride history.</p>
+  <div class="feat">
+    <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4-5"/></svg><span><b>4 display styles</b>Classic LCD, Cockpit, VESC data and Big speed</span></div>
+    <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg><span><b>Bluetooth and USB</b>Live data from VESC controllers</span></div>
+    <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg><span><b>Every device</b>iPhone, Android, Windows and Mac</span></div>
+  </div>
+  <button class="btn primary" id="onbPick">Choose my scooter</button>
+  <button class="btn" id="onbAcc">Sign in or create account</button>
+  <button class="btn" id="onbDemo">Try the beta</button>
+</div></div>
+<div class="ptr" id="ptr" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg></div>
+<div class="app" id="scroller">
+<header class="appbar">
+  <button class="abBack" id="abBack" hidden aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <div class="lg" id="abLogo"><svg viewBox="0 0 1024 1024"><use href="#logoSym"/></svg></div>
+  <div class="tt"><b id="abTitle">G2 Dash</b><span id="abSub"></span></div>
+  <button class="pill" id="abPill" aria-label="Connection status, open connection settings"><i id="abDot"></i><span id="abTxt">Beta</span></button>
+</header>
+
+<section class="view active" id="v-dash" role="tabpanel" aria-labelledby="tab-dash" tabindex="-1">
+  <div class="iosban" id="iosBan"><button class="x" id="iosX" aria-label="Close">×</button><div id="iosTxt"></div></div>
+  <div id="disp" role="img" aria-label="Scooter display"></div>
+  <div class="ctl">
+    <div class="ctrow">
+      <div class="grp"><label>Gear</label><div class="segs" id="gearSegs"><button data-g="0">1</button><button data-g="1">2</button><button data-g="2">3</button></div></div>
+      <div class="grp"><label>Motor</label><div class="segs" id="motSegs"><button data-m="1">Single</button><button data-m="2">Dual</button></div></div>
+    </div>
+    <div class="limrow">
+      <div><label>Speed limit</label><b id="limVal">Off</b></div>
+      <button class="lb" id="limDown" aria-label="Lower speed limit">−</button>
+      <button class="lb" id="limUp" aria-label="Raise speed limit">+</button>
+      <button class="applyb" id="limApply" hidden>Apply</button>
+    </div>
+    <div id="demoCtrls">
+      <button class="throttle" id="throttle">Hold to ride</button>
+      <div class="chips">
+        <button class="chip" id="lightBtn" aria-pressed="false">Headlight</button>
+        <button class="chip" id="cruiseBtn" aria-pressed="false">Cruise</button>
+        <button class="chip" id="brakeBtn" aria-pressed="false">Brake</button>
+      </div>
+    </div>
+    <p class="cnote" id="cnote"></p>
+  </div>
+  <h3>Last 60 seconds</h3>
+  <div class="card">
+    <div class="gh"><span id="ghMax"></span><span><span class="k" style="--c:var(--accent)">Speed</span><span class="k" style="--c:var(--lcdlabel)">Power</span></span></div>
+    <canvas id="graph"></canvas>
+  </div>
+</section>
+
+<section class="view" id="v-stats" role="tabpanel" aria-labelledby="tab-stats" tabindex="-1">
+  <h2>This ride</h2>
+  <div class="stats">
+    <div class="stt"><label>Distance</label><div class="v"><span id="sDist">0.00</span><small class="du">km</small></div></div>
+    <div class="stt"><label>Ride time</label><div class="v"><span id="sTime">0:00</span></div></div>
+    <div class="stt"><label>Average speed</label><div class="v"><span id="sAvg">0</span><small class="su">km/h</small></div></div>
+    <div class="stt"><label>Top speed</label><div class="v"><span id="sMax">0</span><small class="su">km/h</small></div></div>
+    <div class="stt"><label>Energy used</label><div class="v"><span id="sWh">0</span><small>Wh</small></div></div>
+    <div class="stt"><label>Efficiency</label><div class="v"><span id="sEff">–</span><small id="effU">Wh/km</small></div></div>
+    <div class="stt"><label>Peak power</label><div class="v"><span id="sPk">0</span><small>W</small></div></div>
+    <div class="stt"><label>Odometer</label><div class="v"><span id="sOdo">0</span><small class="du">km</small></div></div>
+  </div>
+  <button class="btn" id="resetTrip">Save and start a new ride</button>
+  <h3>Past rides</h3>
+  <div class="hist" id="hist"></div>
+  <button class="btn danger" id="clearHist">Clear ride history</button>
+</section>
+
+<section class="view" id="v-account" aria-label="Account" tabindex="-1">
+  <h2>Account</h2>
+  <div id="acCfg" class="note warn" hidden>Sign-in isn't set up on this copy of the app yet. The owner needs to add the account server settings (see SETUP-LOGIN.md). You can keep using G2 Dash without an account.</div>
+  <div id="acOut">
+    <div class="achero"><div class="av big">G2</div><b>Sign in to G2 Dash</b><span>Back up your rides, odometer and settings, and use them on all your devices. Optional.</span></div>
+    <div class="group acform">
+      <label class="acf"><span>Email</span><input id="acEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"></label>
+      <label class="acf"><span>Password</span><input id="acPass" type="password" autocomplete="current-password" placeholder="At least 8 characters" minlength="8"></label>
+    </div>
+    <button class="btn primary" id="acSignIn">Sign in</button>
+    <button class="btn" id="acSignUp">Create account</button>
+    <button class="linkbtn" id="acForgot">Forgot password?</button>
+    <p class="note" style="text-align:center">You can use G2 Dash without an account.</p>
+  </div>
+  <div id="acNewPwBox" hidden>
+    <div class="group acform"><label class="acf"><span>New password</span><input id="acNewPw" type="password" autocomplete="new-password" minlength="8"></label></div>
+    <button class="btn primary" id="acSetPw">Save new password</button>
+  </div>
+  <div id="acIn" hidden>
+    <div class="achero"><div class="av big" id="acAv">?</div><b id="acMail"></b><span id="acSync">Not synced yet</span></div>
+    <button class="btn primary" id="acSyncBtn">Sync now</button>
+    <button class="btn" id="acSignOut">Sign out</button>
+    <h3>Delete account</h3>
+    <p class="note">This permanently deletes your G2 Dash account, your email address and all synced rides and settings from our server, and removes the data on this device. It can't be undone.</p>
+    <button class="btn dangerfill" id="acDelete">Delete my account</button>
+  </div>
+</section>
+
+<section class="view" id="v-set" role="tabpanel" aria-labelledby="tab-set" tabindex="-1">
+  <h2>Settings</h2>
+
+  <h3>Connection</h3>
+  <div class="conn">
+    <button class="btn ctile" id="gpsBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.1-7-11.5a7 7 0 0 1 14 0C19 14.9 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg><b>GPS</b><small>Any bike or scooter</small></button>
+    <button class="btn ctile primary" id="btBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg><b>Bluetooth</b><small>VESC · iPhone &amp; Android</small></button>
+    <button class="btn ctile" id="usbBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="8.2" y="1.5" width="7.6" height="5.2" rx="1.2"/><path d="M10.3 4.1h.9M12.8 4.1h.9"/><path d="M7.5 6.7h9a1.1 1.1 0 0 1 1.1 1.1v9.1l-2.1 2.1h-7l-2.1-2.1V7.8a1.1 1.1 0 0 1 1.1-1.1z"/><path d="M9.6 19h4.8v2.6a.9.9 0 0 1-.9.9h-3a.9.9 0 0 1-.9-.9z"/><path d="M12 9.2v7.3M12 15l-2.1-1.5v-1.6M12 13.3l2.1-1.5v-1.6"/></svg><b>USB cable</b><small id="usbSub">VESC · Android &amp; PC</small></button>
+  </div>
+  <details class="how"><summary>How connecting works</summary><p class="note" id="bleNote"></p></details>
+
+  <h3>Vehicle</h3>
+
+  <div class="segs" id="catSeg" role="group" aria-label="Vehicle type" style="margin-bottom:10px"><button data-c="scooter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="18" r="2.6"/><circle cx="19" cy="18" r="2.6"/><path d="M7.6 18h7.2l2.9-6.4"/><path d="M19 18 15.9 4"/><path d="M13.2 4h3.3"/></svg>E-scooters</button><button data-c="bike"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="16" r="3.5"/><circle cx="18.5" cy="16" r="3.5"/><path d="M5.5 16 9.3 9h6.4l2.8 7"/><path d="M12.6 16 9.3 9"/><path d="M7.9 6.5h3"/><path d="M14.4 6.5h2.3l-1 2.5"/></svg>E-bikes</button></div>
+  <input class="search" id="mSearch" type="search" placeholder="Search all models" aria-label="Search all models" autocomplete="off">
+  <div class="bwrap at-start" id="bwrap">
+    <button class="barr l" id="bL" aria-label="Scroll brands left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div class="brands" id="brands" role="listbox" aria-label="Brands"></div>
+    <button class="barr r" id="bR" aria-label="Scroll brands right"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+  </div>
+  <div class="models" id="models"></div>
+  <p class="note" style="margin-top:8px">Specs are approximate. Adjust them under Motors and Battery &amp; wheel.</p>
+
+
+
+  <h3>Display</h3>
+  <div class="styles" id="styles">
+    <button class="scard" data-s="classic"><i class="p1"></i>Classic</button>
+    <button class="scard" data-s="wide"><i class="p2"></i>Cockpit</button>
+    <button class="scard" data-s="vesc"><i class="p3"></i>VESC data</button>
+    <button class="scard" data-s="big"><i class="p4"></i>Big speed</button>
+  </div>
+  <div class="field"><label>Display color</label>
+    <select id="fColor"><option value="auto">Style default</option><option value="#56E36F">Green</option><option value="#FF6B1F">Orange</option><option value="#3EC3F2">Blue</option><option value="#FF4D40">Red</option><option value="#B583FF">Purple</option><option value="#FFD23F">Yellow</option><option value="#EEF6F7">White</option></select></div>
+  <div class="field"><label>Speed units</label><div class="seg2" id="unitSeg"><button data-u="km">km/h</button><button data-u="mi">mph</button></div></div>
+  <div class="field"><label>Speed warning<small>Flash and beep above this speed, 0 = off</small></label><input id="fAlert" type="number" inputmode="numeric"></div>
+  <div class="field"><label>Keep screen on<small>While the dashboard is open</small></label><button class="sw" id="wakeSw" role="switch" aria-label="Keep screen on"></button></div>
+  <div class="field"><label>App theme<small>The scooter display stays dark</small></label>
+    <select id="fTheme"><option value="auto">Automatic</option><option value="dark">Dark</option><option value="light">Light</option></select></div>
+
+  <h3>Stock controllers<span class="beta">BETA</span></h3>
+  <div class="field col"><label>Bluetooth protocol<small>Which controller your scooter has</small></label><div class="seg2" id="protoSeg"><button data-p="vesc">VESC</button><button data-p="xiaomi">Xiaomi</button><button data-p="ninebot">Ninebot</button></div></div>
+  <p class="note"><b>Xiaomi / Ninebot (beta, read only):</b> speed, battery %, trip, odometer, temperature and error codes. Works on older Xiaomi and Segway-Ninebot firmware. Newer firmware is encrypted and won't send data. Gears and the speed limit only work with VESC.</p>
+
+  <h3>Scanner<span class="beta">BETA</span></h3>
+  <p class="note">For <b>Kukirin, Dualtron, Boyueda</b> and other stock controllers. Their Bluetooth language isn't public, so the scanner connects to any scooter and records what it sends. Turn the scooter on, scan, ride a bit, change gears and lights, then tap <b>Copy log</b> and send it to me so I can add support.</p>
+  <button class="btn primary" id="scanBtn">Scan a scooter</button>
+  <div class="scanst"><i id="scanDot"></i><span id="scanSt">Not connected</span></div>
+  <pre id="scanLog"></pre>
+  <div class="scanrow"><button class="btn" id="scanCopy">Copy log</button><button class="btn" id="scanClear">Clear</button></div>
+
+  <h3>Gears</h3>
+  <div class="field"><label>Top speed per gear<small>Percent of the scooter's top speed</small></label><div class="trip3"><input id="gs0" type="number"><input id="gs1" type="number"><input id="gs2" type="number"></div></div>
+  <div class="field"><label>Power per gear<small>Percent of full power</small></label><div class="trip3"><input id="gp0" type="number"><input id="gp1" type="number"><input id="gp2" type="number"></div></div>
+  <div class="field"><label>Keep speed limit after restart<small>Saves the limit into the VESC's memory</small></label><button class="sw" id="limStoreSw" role="switch" aria-label="Keep speed limit after restart"></button></div>
+  <div class="field"><label>Gears change the controller<small>Sends speed and power limits to your VESC</small></label><button class="sw" id="ctrlSw" role="switch" aria-label="Gears change the controller"></button></div>
+  <p class="note warn">The speed limit on the dashboard is sent when you tap Apply. Follow your local speed laws on public roads. With "Gears change the controller" on, gear and single/dual changes set temporary limits on the VESC. They reset when the controller restarts. Only use it on a VESC you've already set up and tested.</p>
+
+  <h3>Motors</h3>
+  <div class="field"><label>Motors on this scooter</label><div class="seg2" id="motCount"><button data-n="1">1</button><button data-n="2">2</button></div></div>
+  <div class="field"><label>Rated power per motor<small>Watts</small></label><input id="fWatt" type="number" inputmode="numeric"></div>
+  <div class="field"><label>Peak power per motor<small>Watts</small></label><input id="fPeak" type="number" inputmode="numeric"></div>
+  <div class="field"><label>Top speed<small>km/h</small></label><input id="fTop" type="number" inputmode="numeric"></div>
+  <div class="field"><label>Motor pole pairs<small>Hub motors are usually 15</small></label><input id="fPoles" type="number" inputmode="numeric"></div>
+  <div class="field"><label>Rear controller CAN ID<small>For dual VESC over CAN</small></label><input id="fCan" type="number" inputmode="numeric"></div>
+
+  <h3>Battery &amp; wheel</h3>
+  <div class="field"><label>Cells in series<small>13S = 48V, 16S = 60V, 20S = 72V</small></label><input id="fCells" type="number" inputmode="numeric"></div>
+  <div class="field"><label>Capacity<small>Amp hours</small></label><input id="fAh" type="number" inputmode="decimal" step="0.1"></div>
+  <div class="field"><label>Wheel size<small>Tire outer diameter, inches</small></label><input id="fWheel" type="number" inputmode="decimal" step="0.5"></div>
+  <button class="btn" id="resetModel">Restore model defaults</button>
+
+  <h3>Account &amp; data</h3>
+  <button class="navrow" id="openAccount"><span class="av" id="acAvSmall">?</span><span class="nt"><b>Account</b><small id="acState">Sign in to sync rides and settings</small></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+  <button class="btn danger" id="resetOdo">Reset odometer</button>
+  <button class="btn danger" id="delAccSet" hidden>Delete account</button>
+  <button class="btn danger" id="wipeAll">Delete all data on this device</button>
+  <p class="note">An account is optional. Without one, everything stays on this device. With one, your rides and settings are backed up to your account so you can use them on other devices. You can delete your account at any time.</p>
+
+  <div id="installBox">
+    <h3>Install on iPhone</h3>
+    <ol class="note"><li>Open this page in <b>Safari</b>, or <b>Bluefy</b> for live data.</li><li>Tap <b>Share</b>, then <b>Add to Home Screen</b>.</li></ol>
+  </div>
+  <p class="note" style="margin-top:24px">G2 Dash v4.1 beta · e-scooters and e-bikes</p>
+</section>
+</div>
+
+<nav class="tabs" role="tablist" aria-label="Main"><div class="in">
+  <button role="tab" id="tab-dash" aria-controls="v-dash" aria-selected="true" data-v="dash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4-5"/></svg>Dash</button>
+  <button role="tab" id="tab-stats" aria-controls="v-stats" aria-selected="false" data-v="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Ride</button>
+  <button role="tab" id="tab-set" aria-controls="v-set" aria-selected="false" data-v="set"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M10.01 4.56 L10.48 1.81 L13.52 1.81 L13.99 4.56 L15.85 5.33 L18.13 3.72 L20.28 5.87 L18.67 8.15 L19.44 10.01 L22.19 10.48 L22.19 13.52 L19.44 13.99 L18.67 15.85 L20.28 18.13 L18.13 20.28 L15.85 18.67 L13.99 19.44 L13.52 22.19 L10.48 22.19 L10.01 19.44 L8.15 18.67 L5.87 20.28 L3.72 18.13 L5.33 15.85 L4.56 13.99 L1.81 13.52 L1.81 10.48 L4.56 10.01 L5.33 8.15 L3.72 5.87 L5.87 3.72 L8.15 5.33Z"/><circle cx="12" cy="12" r="3.3"/></svg>Settings</button>
+</div></nav>
+<div class="sheetbg" id="sheet" hidden><div class="sheet" role="alertdialog" aria-modal="true" aria-labelledby="shTitle" aria-describedby="shText">
+  <div class="grab" aria-hidden="true"></div><h4 id="shTitle"></h4><p id="shText"></p>
+  <button class="btn dangerfill" id="shOk"></button><button class="btn" id="shCancel">Cancel</button></div></div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+<div class="sr" id="srLive" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+(()=>{
+/* ---------- model library (approximate factory specs; watt/peak are per motor) ---------- */
+const M=(name,v,cells,ah,watt,peak,top,wheel,motors,range,sys)=>({name,volt:v,cells,ah,watt,peak,top,wheel,motors,range,poles:15,sys});
+/* e-bike: 36V system, Wh battery, assist to 25 km/h (EU) unless noted */
+const B=(name,sys,wh,peak,wheel,range,v,cells,top)=>M(name,v||"36V",cells||10,+(wh/((cells||10)*3.6)).toFixed(1),250,peak,top||25,wheel,1,range,sys);
+const BRANDS={
+ kukirin:{name:"Kukirin",models:{
+  s1max:M("S1 Max","36V",10,10.4,350,500,25,8,1,39),
+  g2:M("G2","48V",13,15,800,1200,45,10,1,55),g2pro:M("G2 Pro","48V",13,15.6,600,1000,45,9,1,58),
+  g2vmp:M("G2 Pro (VMP)","48V",13,15.6,500,800,25,9,1,58),t3:M("T3","48V",13,15.6,600,1000,45,9,1,58),
+  g2max:M("G2 Max","48V",13,20.8,1000,1200,55,10,1,70),g2master:M("G2 Master","52V",14,20.8,1000,1400,60,10,2,70),
+  g2ultra:M("G2 Ultra","48V",13,18,800,1200,55,10,2,55),
+  g3:M("G3","52V",14,18,1200,1450,50,10,1,63),g3pro:M("G3 Pro","52V",14,23.4,1200,1800,65,10,2,80),
+  g4:M("G4","60V",16,20.8,2000,3000,75,11,1,75),g4max:M("G4 Max","60V",16,35.2,1600,2500,86,11,2,100),
+  c1pro:M("C1 Pro","48V",13,26,500,800,45,10,1,100),m4max:M("M4 Max","48V",13,21,500,1000,45,10,1,60)}},
+ dualtron:{name:"Dualtron",models:{
+  togo:M("Togo","48V",13,12,500,800,36,8.5,1,40),pop:M("Pop","52V",14,15,800,1200,45,10,1,45),
+  mini:M("Mini","52V",14,13,800,1450,45,8,1,45),victor:M("Victor","60V",16,24,1450,2000,70,10,2,80),
+  achilleus:M("Achilleus","60V",16,35,1750,2700,70,10,2,100),thunder2:M("Thunder 2","72V",20,40,2700,3600,95,11,2,120),
+  thunder3:M("Thunder 3","72V",20,40,4000,5000,100,11,2,150),storm:M("Storm","84V",23,31.5,3000,4500,110,11,2,120),
+  xltd:M("X Limited","84V",23,60,4000,6000,120,13,2,200)}},
+ boyueda:{name:"Boyueda",models:{
+  q7pro:M("Q7 Pro","60V",16,19,1600,1600,70,10,2,70),q7promax:M("Q7 Pro Max","52V",14,28,1600,1600,70,10,2,90),
+  s311:M("S3-11","60V",16,38,3000,3000,85,11,2,120),s511:M("S5-11","60V",16,38,3000,3000,85,11,2,120),
+  m2:M("M2","72V",20,40,5000,5000,95,12,2,120)}},
+ xiaomi:{name:"Xiaomi",models:{
+  ess:M("Essential","36V",10,5.1,250,300,20,8.5,1,20),s1:M("1S","36V",10,7.65,250,500,25,8.5,1,30),
+  m3:M("Scooter 3","36V",10,7.65,300,600,25,8.5,1,30),m4:M("Scooter 4","36V",10,10.2,300,600,25,10,1,35),
+  m4pro:M("Scooter 4 Pro","48V",13,12.4,350,700,25,10,1,55),m4u:M("Scooter 4 Ultra","48V",13,18.7,500,940,25,10,1,70),m5pro:M("Scooter 5 Pro","48V",13,10.2,400,1000,25,10,1,60)}},
+ segway:{name:"Segway",models:{
+  es2:M("ES2","36V",10,5.2,300,700,25,8,1,25),f40:M("F40","36V",10,10.2,350,700,30,10,1,40),
+  g30:M("Max G30","36V",10,15.3,350,700,30,10,1,65),g2:M("Max G2","36V",10,15.3,450,900,25,10,1,70),
+  p100:M("P100","48V",13,25.5,650,1350,25,10.5,1,100),gt1:M("GT1","60V",16,25.2,1400,3000,60,11,1,70),
+  gt2:M("GT2","72V",20,26.2,1500,3000,70,11,2,90),
+  g3:M("Max G3","48V",13,12.8,850,2000,25,11,1,80),zt3:M("ZT3 Pro","48V",13,12.8,650,1600,25,11,1,65),
+  f3:M("F3","48V",13,10.2,450,1000,25,10,1,70),f2pro:M("F2 Pro","36V",10,10.2,450,900,25,10,1,55),e3pro:M("E3 Pro","36V",10,10.2,400,800,25,10,1,55)}},
+ kaabo:{name:"Kaabo",models:{
+  m8:M("Mantis 8","48V",13,13,800,1100,50,8,2,45),m10:M("Mantis 10","60V",16,18.2,1000,1500,60,10,2,55),
+  mkgt:M("Mantis King GT","60V",16,24,1100,1600,70,10,2,70),wwx:M("Wolf Warrior X","60V",16,21,1100,1600,70,10,2,60),
+  ww11:M("Wolf Warrior 11","60V",16,35,1200,2200,80,11,2,100),wkgt:M("Wolf King GT","72V",20,35,2000,3000,100,11,2,120)}},
+ vsett:{name:"Vsett",models:{
+  v8:M("8","48V",13,13,500,800,40,8,1,40),v9:M("9+","48V",13,15.6,650,1200,45,8.5,1,55),
+  v10:M("10+","60V",16,25.6,1400,2800,80,10,2,100),v11:M("11+","60V",16,33.6,2800,3500,90,11,2,120)}},
+ zero:{name:"Zero",models:{
+  z8:M("8","48V",13,13,500,800,40,8,1,35),z10:M("10","52V",14,18,1000,1200,50,10,1,50),
+  z8x:M("8X","52V",14,26,1000,1600,65,8,2,70),z10x:M("10X","52V",14,26,1000,1600,65,10,2,80),
+  z11x:M("11X","72V",20,32,1200,3200,100,11,2,120)}},
+ apollo:{name:"Apollo",models:{
+  city:M("City","48V",13,18,500,1000,45,10,1,50),ghost:M("Ghost","52V",14,23.4,1000,1200,55,10,2,62),
+  phantom:M("Phantom","52V",14,23.4,1200,1600,61,10,2,64),pro:M("Pro","72V",20,30,1500,3500,100,12,2,100)}},
+ nami:{name:"NAMI",models:{
+  klima:M("Klima","60V",16,25,1000,1750,65,10,2,70),burne2:M("Burn-E 2","72V",20,35,1500,4000,100,11,2,120)}},
+ teverun:{name:"Teverun",models:{
+  mini:M("Fighter Mini","52V",14,20,1000,1600,65,10,2,60),f11:M("Fighter 11","60V",16,35,1500,2600,90,11,2,120),
+  sup:M("Fighter Supreme","72V",20,35,2000,3600,100,11,2,150)}},
+ inokim:{name:"Inokim",models:{
+  light2:M("Light 2","36V",10,10.4,350,600,30,8,1,30),quick4:M("Quick 4","52V",14,16,800,1000,50,10,1,60),
+  ox:M("OX","60V",16,20.4,1300,1800,60,10,1,65),oxo:M("OXO","60V",16,20.4,1000,1300,70,10,2,70)}},
+ hiboy:{name:"Hiboy",models:{
+  s2:M("S2","36V",10,7.8,350,500,30,8.5,1,27),s2pro:M("S2 Pro","36V",10,11.6,500,600,32,10,1,40),
+  s2max:M("S2 Max","48V",13,10,500,700,32,10,1,55)}},
+ iscooter:{name:"iScooter",models:{
+  i9:M("i9","36V",10,7.5,350,500,30,8.5,1,30),i9max:M("i9 Max","36V",10,10,500,650,35,10,1,40),
+  ix6:M("iX6","48V",13,17.5,1000,1500,45,11,1,50)}},
+ joyor:{name:"Joyor",models:{
+  s5:M("S5","48V",13,10.4,500,800,40,10,1,40),y10:M("Y10","60V",16,18,1000,1500,65,10,2,90)}},
+ niu:{name:"NIU",models:{air:M("KQi Air","36V",10,9.5,350,700,25,9.5,1,50),kqi2:M("KQi2 Pro","36V",10,7.6,300,600,25,10,1,40),
+  kqi3p:M("KQi3 Pro","48V",13,9.8,350,700,25,9.5,1,50),kqi3m:M("KQi3 Max","48V",13,12.7,450,900,25,9.5,1,65)}},
+ pure:{name:"Pure",models:{airpro:M("Air Pro","36V",10,10.4,350,710,25,10,1,40),adv:M("Advance","36V",10,10.4,500,710,25,10,1,50),advflex:M("Advance Flex","36V",10,10.4,500,710,25,10,1,50)}},
+ navee:{name:"Navee",models:{n65:M("N65","48V",13,12.5,500,1000,25,10,1,65),s65:M("S65","48V",13,12.5,500,1000,25,10,1,65),v50:M("V50","36V",10,7.8,350,600,25,10,1,40)}},
+ kugoo:{name:"Kugoo",models:{s1pro:M("Kirin S1 Pro","36V",10,7.5,350,500,30,8,1,25),m4pro:M("Kirin M4 Pro","48V",13,18,500,1000,45,10,1,50),
+  g2pro:M("Kirin G2 Pro","48V",13,15,600,1000,45,10,1,55),gboost:M("G-Booster","48V",13,23.4,800,1200,55,10,2,85)}},
+ ausom:{name:"Ausom",models:{leopard:M("Leopard","48V",13,20,1000,1500,50,10,1,55),gallop:M("Gallop","52V",14,23,1000,1600,65,10,2,70)}},
+ inmotion:{name:"Inmotion",models:{s1:M("S1","48V",13,15,500,1000,30,10,1,95),climber:M("Climber","36V",10,7.8,500,800,25,10,1,40),rs:M("RS","72V",20,40,2000,4000,110,11,2,160)}},
+ mercane:{name:"Mercane",models:{wwpro:M("WideWheel Pro","48V",13,15,500,1000,42,8,2,40)}},
+ emove:{name:"EMOVE",models:{cruiser:M("Cruiser","52V",14,30,600,1600,40,10,1,100)}},
+ unagi:{name:"Unagi",models:{one:M("Model One","36V",10,7.5,250,500,32,7.5,2,25)}},
+ gotrax:{name:"Gotrax",models:{g4:M("G4","36V",10,10.4,350,500,32,10,1,30),gx2:M("GX2","48V",13,18,1000,2000,50,10,2,50)}},
+ yadea:{name:"Yadea",models:{ks5:M("KS5 Pro","36V",10,10.4,350,700,25,10,1,40),ks6:M("KS6 Pro","48V",13,15,500,1000,25,10,1,60)}},
+ okai:{name:"Okai",models:{neon:M("Neon Pro","36V",10,15.6,350,700,25,10,1,60)}},
+ minimotors:{name:"Minimotors",models:{sw5:M("Speedway 5","60V",16,23.4,1600,3200,80,10,2,90)}},
+ weped:{name:"Weped",models:{fs:M("FS","72V",20,50,5000,15000,120,11,2,150),gtr:M("GTR","72V",20,35,2500,4500,100,11,2,130)}},
+ /* ---------- E-BIKES ---------- */
+ yozma:{name:"Yozma",cat:"bike",models:{in10:M("IN10","48V",13,23.4,1200,2600,64,14,1,85,"Mid-drive · 2600W peak"),
+  in10pro:M("IN10 Pro","60V",16,30,3000,5500,80,14,1,80,"Hub · 5500W peak")}},
+ haibike:{name:"Haibike",cat:"bike",models:{allmtn:B("AllMtn","Yamaha PW-X3",720,500,29,120),alltrail:B("AllTrail","Yamaha PW-X3",720,500,29,120),
+  hardseven:B("HardSeven","Yamaha PW-ST",630,450,27.5,110),trekking6:B("Trekking 6","Yamaha PW-ST",630,450,28,130),
+  nduro:B("Nduro","Yamaha PW-X3",720,500,27.5,110),lyke:B("Lyke","Fazua Ride 60",430,450,29,80),sduro:B("Sduro FullSeven","Bosch CX",625,600,27.5,110)}},
+ ktm:{name:"KTM",models:{kapoho:B("Macina Kapoho","Bosch CX",750,600,29,120),lycan:B("Macina Lycan","Bosch CX",750,600,29,120),
+  chacana:B("Macina Chacana","Bosch CX",625,600,29,110),tour:B("Macina Tour","Bosch Performance",625,500,28,140),
+  gran:B("Macina Gran","Bosch Performance",500,500,28,120),style:B("Macina Style","Bosch Active",500,400,28,120)},cat:"bike"},
+ giant:{name:"Giant",cat:"bike",models:{trancex:B("Trance X E+","Yamaha SyncDrive Pro",800,560,29,130),talon:B("Talon E+","Yamaha SyncDrive Sport",625,500,29,120),
+  explore:B("Explore E+","Yamaha SyncDrive Pro",625,560,28,140),stance:B("Stance E+","Yamaha SyncDrive Pro",625,560,27.5,110),reign:B("Reign E+","Yamaha SyncDrive Pro",800,560,29,120)}},
+ yamaha:{name:"Yamaha",cat:"bike",models:{moro:B("Moro 07","Yamaha PW-X3",720,500,29,120),wabash:B("Wabash RT","Yamaha PW-ST",500,450,27.5,110),
+  crosscore:B("CrossCore RC","Yamaha PW-ST",500,450,28,120),urban:B("Urban Rush","Yamaha PW-ST",500,450,28,100,"36V",10,32)}},
+ bosch:{name:"Bosch bikes",cat:"bike",models:{cx:B("Any bike · CX","Bosch Performance CX",750,600,29,120),perf:B("Any bike · Performance","Bosch Performance",625,500,28,130),
+  active:B("Any bike · Active","Bosch Active Plus",500,400,28,120),cargo:B("Any bike · Cargo","Bosch Cargo Line",725,600,20,90),sx:B("Any bike · SX","Bosch Performance SX",400,600,29,70)}},
+ shimano:{name:"Shimano bikes",cat:"bike",models:{ep8:B("Any bike · EP8","Shimano EP8",630,500,29,110),ep6:B("Any bike · EP6","Shimano EP6",630,500,29,110),e6100:B("Any bike · E6100","Shimano E6100",504,500,28,110)}},
+ specialized:{name:"Specialized",cat:"bike",models:{levo:B("Turbo Levo","Specialized 2.2",700,565,29,110),kenevo:B("Turbo Kenevo","Specialized 2.2",700,565,27.5,100),
+  vado:B("Turbo Vado","Specialized 2.0",710,500,28,130),como:B("Turbo Como","Specialized 2.0",710,500,27.5,130),levosl:B("Turbo Levo SL","Specialized SL 1.2",320,320,29,70)}},
+ trek:{name:"Trek",cat:"bike",models:{rail:B("Rail","Bosch CX",750,600,29,120),powerfly:B("Powerfly","Bosch CX",625,600,29,110),allant:B("Allant+","Bosch Performance",625,500,27.5,130),
+  verve:B("Verve+","Bosch Active",500,400,28,110),fetch:B("Fetch+","Bosch Cargo Line",500,600,20,80)}},
+ cube:{name:"Cube",cat:"bike",models:{stereo:B("Stereo Hybrid","Bosch CX",750,600,29,120),reaction:B("Reaction Hybrid","Bosch CX",625,600,29,110),
+  kathmandu:B("Kathmandu Hybrid","Bosch Performance",625,500,28,140),nuroad:B("Nuroad Hybrid","Bosch Performance",625,500,28,130)}},
+ scott:{name:"Scott",cat:"bike",models:{patron:B("Patron eRide","Bosch CX",750,600,29,120),strike:B("Strike eRide","Bosch CX",625,600,29,110),axis:B("Axis eRide","Bosch Performance",625,500,28,130),lumen:B("Lumen eRide","TQ HPR50",360,300,29,70)}},
+ bulls:{name:"Bulls",cat:"bike",models:{estream:B("E-Stream EVO","Brose S Mag",750,550,27.5,110),copperhead:B("Copperhead EVO","Bosch CX",625,600,29,110),sonic:B("Sonic EVO","Bosch CX",750,600,29,120)}},
+ merida:{name:"Merida",cat:"bike",models:{eone60:B("eOne-Sixty","Shimano EP8",750,500,29,120),ebig9:B("eBig.Nine","Shimano EP6",630,500,29,110),espresso:B("eSpresso","Shimano EP6",630,500,28,130)}},
+ orbea:{name:"Orbea",cat:"bike",models:{wild:B("Wild","Bosch CX",750,600,29,120),rise:B("Rise","Shimano EP801 RS",540,500,29,90),kemen:B("Kemen","Shimano EP6",630,500,28,130)}},
+ canyon:{name:"Canyon",cat:"bike",models:{spectral:B("Spectral:ON","Shimano EP801",900,500,29,140),neuron:B("Neuron:ON","Shimano EP801",630,500,29,110),pathlite:B("Pathlite:ON","Bosch Performance",625,500,28,130)}},
+ rad:{name:"Rad Power",cat:"bike",models:{rover6:M("RadRover 6 Plus","48V",13,14,750,1100,32,26,1,70,"Rad hub motor"),city5:M("RadCity 5 Plus","48V",13,14,750,1100,32,27.5,1,80,"Rad hub motor"),
+  wagon4:M("RadWagon 4","48V",13,14,750,1100,32,22,1,70,"Rad hub motor")}},
+ engwe:{name:"Engwe",cat:"bike",models:{ep2:M("EP-2 Pro","48V",13,13,750,1000,25,20,1,60,"Hub motor"),engine:M("Engine Pro","48V",13,16,750,1000,25,20,1,70,"Hub motor"),
+  e26:M("E26","48V",13,16,250,750,25,26,1,70,"Hub motor")}},
+ fiido:{name:"Fiido",cat:"bike",models:{d11:M("D11","36V",10,11.6,250,400,25,20,1,60,"Hub motor"),x:M("X","36V",10,11.6,250,500,25,20,1,70,"Hub motor"),
+  t1:M("T1","48V",13,20,250,750,25,20,1,100,"Hub motor")}},
+ himiway:{name:"Himiway",cat:"bike",models:{cruiser:M("Cruiser","48V",13,17.5,750,1000,32,26,1,90,"Hub motor"),zebra:M("Zebra","48V",13,20,750,1000,32,26,1,110,"Hub motor")}},
+ bafang:{name:"Bafang kits",cat:"bike",models:{bbs02:M("BBS02 mid-drive","48V",13,17.5,750,1000,40,26,1,60,"Bafang BBS02"),bbshd:M("BBSHD mid-drive","52V",14,17.5,1000,1500,45,26,1,55,"Bafang BBSHD"),
+  m600:M("M600 mid-drive","48V",13,14,500,800,25,29,1,90,"Bafang M600")}},
+ custom:{name:"Custom",cat:"both",models:{custom:M("My scooter","48V",13,15,1000,1500,50,10,1,50),bike:B("My e-bike","Any motor",625,500,28,110)}}
+};
+const FAULTS=["","Over voltage","Under voltage","Gate driver error","Over current","Controller overheat","Motor overheat","Gate driver over voltage","Gate driver under voltage","MCU under voltage","Watchdog reset","Encoder fault","Encoder signal low","Encoder signal high","Flash corruption","Current sensor 1","Current sensor 2","Current sensor 3","Unbalanced currents"];
+const GEAR_NAMES=["Eco","Drive","Sport"],WIDE_NAMES=["ECO","DRIVE","RACE"];
+
+const $=id=>document.getElementById(id);
+const store={get(k,d){try{const v=localStorage.getItem("g2dash:"+k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem("g2dash:"+k,JSON.stringify(v));if(k!=="lastSync")window.__g2dirty=true}catch(e){}}};
+const G=Object.assign({style:"classic",units:"km",gearPct:[55,80,100],gearPow:[60,85,100],ctrlGears:false,canId:1,wake:true,theme:"auto",alert:0},store.get("settings",{}));
+const saveG=()=>store.set("settings",G);
+let modelKey=store.get("modelKey","kukirin:g2pro");
+let brandView=modelKey.split(":")[0];
+function baseModel(k){const[b,m]=k.split(":");return BRANDS[b]&&BRANDS[b].models[m]}
+if(!baseModel(modelKey))modelKey="kukirin:g2pro";
+let cfg,limit=0;function loadCfg(){cfg=Object.assign({},baseModel(modelKey),store.get("cfg:"+modelKey,{}));cfg.brand=BRANDS[modelKey.split(":")[0]].name;limit=store.get("limit:"+modelKey,0);if(limit>cfg.top)limit=0}
+const spdLimit=()=>Math.min(cfg.top*G.gearPct[gear]/100,limit>0?limit:Infinity);
+loadCfg();
+let gear=store.get("gear",1),dual=store.get("dual",true),odo=store.get("odo",0),odoMode="odo";
+let light=false,brake=false,throttle=false,cruise=0,live=false;
+const blankM=()=>({imot:0,ibat:0,tmot:24,tfet:24,duty:0,fresh:0});
+const S={speed:0,power:0,volt:0,ibat:0,soc:100,fault:0,trip:0,wh:0,time:0,max:0,peakP:0,m1:blankM(),m2:blankM()};
+const dualOn=()=>cfg.motors===2&&dual;
+const peakTotal=()=>cfg.peak*(dualOn()?2:1);
+
+/* ---------- seven segment ---------- */
+const NS="http://www.w3.org/2000/svg";
+const SEGS={"0":"abcdef","1":"bc","2":"abged","3":"abgcd","4":"fgbc","5":"afgcd","6":"afgedc","7":"abc","8":"abcdefg","9":"abcdfg","-":"g"," ":""};
+const POLY=(()=>{const t=11,g=1.5,L=t/2,R=56-t/2,T=t/2,Mi=50,B=100-t/2,h=t/2;
+  const H=(y,a,b)=>`${a},${y} ${a+h},${y-h} ${b-h},${y-h} ${b},${y} ${b-h},${y+h} ${a+h},${y+h}`,V=(x,a,b)=>`${x},${a} ${x+h},${a+h} ${x+h},${b-h} ${x},${b} ${x-h},${b-h} ${x-h},${a+h}`;
+  return{a:H(T,L+g,R-g),g:H(Mi,L+g,R-g),d:H(B,L+g,R-g),f:V(L,T+g,Mi-g),b:V(R,T+g,Mi-g),e:V(L,Mi+g,B-g),c:V(R,Mi+g,B-g)}})();
+function Seg(svg,digits,o={}){const GLOW=o.glow===undefined?6:o.glow;
+  const pitch=72,w=digits*pitch+(o.dp?6:0),ghost=o.ghost||"var(--ghost)";
+  if(!o.inline){svg.setAttribute("viewBox",`-4 -2 ${w+2} 104`);svg.setAttribute("preserveAspectRatio",o.align||"xMaxYMid meet")}
+  const root=document.createElementNS(NS,"g");root.setAttribute("transform",`translate(${o.x||0} ${o.y||0}) scale(${o.scale||1}) skewX(-6)`);
+  const slots=[];
+  for(let i=0;i<digits;i++){const g=document.createElementNS(NS,"g");g.setAttribute("transform",`translate(${i*pitch+6} 0)`);const s={};
+    for(const k in POLY){const p=document.createElementNS(NS,"polygon");p.setAttribute("points",POLY[k]);p.style.fill=ghost;g.appendChild(p);s[k]=p}
+    const dp=document.createElementNS(NS,"rect");dp.setAttribute("x",60);dp.setAttribute("y",89);dp.setAttribute("width",11);dp.setAttribute("height",11);dp.setAttribute("rx",2);dp.style.fill=o.dp?ghost:"transparent";g.appendChild(dp);s.dp=dp;
+    root.appendChild(g);slots.push(s)}
+  svg.appendChild(root);let last="";
+  return{set(str,col){col=col||o.color||"var(--seg)";const key=str+"|"+col;if(key===last)return;last=key;
+    const cells=[];for(const ch of String(str)){if(ch==="."&&cells.length)cells[cells.length-1].dp=true;else cells.push({ch,dp:false})}
+    while(cells.length<digits)cells.unshift({ch:" ",dp:false});
+    cells.slice(-digits).forEach((c,i)=>{const on=SEGS[c.ch]||"";for(const k in POLY)slots[i][k].style.fill=on.includes(k)?col:ghost;if(o.dp)slots[i].dp.style.fill=c.dp?col:ghost});
+    if(GLOW)root.style.filter=`drop-shadow(0 0 ${GLOW}px color-mix(in srgb,${col} 55%,transparent))`}}}
+function fmt(v,digits,dec,zero){let s;for(let d=dec;d>=0;d--){s=Math.abs(v).toFixed(d);if(s.replace(".","").length<=digits-(v<0?1:0))break}
+  if(s.replace(".","").length>digits)s="9".repeat(digits);if(zero){let n=s.replace(".","").length;while(n<digits){s="0"+s;n++}}
+  return(v<0&&Number(s)!==0?"-":"")+s}
+
+/* ---------- helpers ---------- */
+const CURVE=[[3.0,0],[3.3,5],[3.5,15],[3.6,30],[3.7,45],[3.8,60],[3.9,72],[4.0,83],[4.1,93],[4.2,100]];
+function socFromV(v){const c=v/cfg.cells;if(c<=3)return 0;for(let i=1;i<CURVE.length;i++)if(c<=CURVE[i][0]){const[a,pa]=CURVE[i-1],[b,pb]=CURVE[i];return pa+(c-a)/(b-a)*(pb-pa)}return 100}
+function vFromSoc(p){for(let i=1;i<CURVE.length;i++)if(p<=CURVE[i][1]){const[a,pa]=CURVE[i-1],[b,pb]=CURVE[i];return(a+(p-pa)/(pb-pa)*(b-a))*cfg.cells}return 4.2*cfg.cells}
+const circ=()=>cfg.wheel*0.0254*Math.PI,K=()=>G.units==="mi"?0.621371:1;
+const dU=()=>G.units==="mi"?"mi":"km",sU=()=>G.units==="mi"?"mph":"km/h";
+const clock=()=>{const d=new Date();return d.getHours()+":"+String(d.getMinutes()).padStart(2,"0")};
+function toast(t){const e=$("toast");e.textContent=t;e.classList.add("show");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("show"),2600)}
+const icon={
+ light:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 6c-4 0-6 2.7-6 6s2 6 6 6h2V6z" fill="currentColor"/><path d="M15 8h5M15 12h5M15 16h5"/></svg>',
+ bt:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg>',
+ cruise:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 13l4-4M12 3v2"/></svg>',
+ ready:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>',
+ dual:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="16" r="4"/><circle cx="18" cy="16" r="4"/><path d="M6 12V6M18 12V6"/></svg>',
+ warn:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></svg>',
+ bolt:'<svg class="z" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg>'};
+
+/* ---------- derived values used by every style ---------- */
+function data(){const k=K(),v=S.speed*k,top=cfg.top*k;
+  const rem=cfg.ah*cfg.cells*3.7*S.soc/100,eff=S.trip>0.3?Math.max(S.wh/S.trip,5):(cfg.ah*cfg.cells*3.7/cfg.range);
+  const alert=G.alert>0&&v>G.alert;
+  return{v,top,alert,over:v>top*1.02||alert,range:rem/eff*k,
+    imot:S.m1.imot+(dualOn()?S.m2.imot:0),tmot:Math.max(S.m1.tmot,cfg.motors===2?S.m2.tmot:0),tfet:Math.max(S.m1.tfet,cfg.motors===2?S.m2.tfet:0),duty:Math.abs(S.m1.duty)}}
+const tempCol=(t,w,h)=>t>h?"var(--lcdred)":t>w?"var(--lcdamber)":undefined;
+
+/* ================= STYLE 1: CLASSIC ================= */
+const Classic={
+ build(root){this.lastLit=-1;root.innerHTML=`<div class="unit"><div class="lcd">
+  <div class="sbar"><span id="c-clock"></span><span class="icons"><span id="c-light" class="off">${icon.light}</span><span id="c-bt" class="bt off">${icon.bt}</span><span id="c-model"></span></span></div>
+  <div class="energy"><div class="row"><span class="lab">ENERGY BAR</span><svg class="pct" id="c-pct"></svg></div><div class="ebar" id="c-ebar"></div></div>
+  <div class="spd"><svg viewBox="0 0 320 178" id="c-arc"></svg><span class="lab">SPEED</span><svg viewBox="0 0 320 178" id="c-spd"></svg><span class="kmh" id="c-u"></span></div>
+  <div class="gearrow"><span class="lab">GEAR</span><svg class="gs" id="c-gear"></svg><span class="mname" id="c-gname"></span><span class="mot" id="c-mot"></span><span class="pw" id="c-pw"></span></div>
+  <button class="odo" id="c-odo"><span class="hd"><span class="lab" id="c-olab">ODO</span><span class="hint" id="c-ohint">Tap for trip</span></span><div class="r"><svg id="c-oseg"></svg><span class="u" id="c-ou"></span></div></button>
+  <div class="fault" id="c-fault"></div>
+  <div class="mini">
+   <div class="c"><div class="lab">VOLT<b>V</b></div><svg id="c-v"></svg></div><div class="c"><div class="lab">BATT<b>A</b></div><svg id="c-a"></svg></div><div class="c"><div class="lab">RANGE<b id="c-ru"></b></div><svg id="c-r"></svg></div>
+   <div class="c"><div class="lab">MOTOR<b>°C</b></div><svg id="c-tm"></svg></div><div class="c"><div class="lab">CTRL<b>°C</b></div><svg id="c-tc"></svg></div><div class="c"><div class="lab">DUTY<b>%</b></div><svg id="c-d"></svg></div>
+  </div></div></div>`;
+  this.spd=Seg($("c-spd"),3,{inline:true,x:118,y:62,scale:.78,dp:true});this.pct=Seg($("c-pct"),3);this.gear=Seg($("c-gear"),1,{align:"xMidYMid meet"});
+  this.odo=Seg($("c-oseg"),5,{dp:true,align:"xMinYMid meet"});
+  this.mv=Seg($("c-v"),3,{dp:true,glow:3});this.ma=Seg($("c-a"),3,{dp:true,glow:3});this.mr=Seg($("c-r"),3,{glow:3});this.mtm=Seg($("c-tm"),3,{glow:3});this.mtc=Seg($("c-tc"),3,{glow:3});this.md=Seg($("c-d"),3,{glow:3});
+  const eb=$("c-ebar");this.eb=[];for(let i=0;i<20;i++){const b=document.createElement("i");b.style.height=(35+65*i/19)+"%";eb.appendChild(b);this.eb.push(b)}
+  const arc=$("c-arc");this.arc=[];const cx=196,cy=182,R=168;
+  for(let i=0;i<30;i++){const a0=(186+i/30*128)*Math.PI/180,a1=(186+(i+.72)/30*128)*Math.PI/180,r1=R-(12+i*.35);
+    const p=document.createElementNS(NS,"polygon");p.setAttribute("points",[[r1,a0],[R,a0],[R,a1],[r1,a1]].map(([r,a])=>`${cx+Math.cos(a)*r},${cy+Math.sin(a)*r}`).join(" "));
+    p.style.fill="var(--ghost)";arc.appendChild(p);this.arc.push(p)}
+  $("c-odo").onclick=toggleOdo},
+ update(D){
+  $("c-clock").textContent=clock();$("c-light").classList.toggle("off",!light);$("c-bt").classList.toggle("off",!(live&&activeProto!=="gps"));$("c-model").innerHTML=cfg.name.toUpperCase()+(limit>0?`<span class="limtag">MAX ${Math.round(limit*K())}</span>`:"");
+  this.spd.set(D.v<99.95?fmt(D.v,3,1):fmt(D.v,3,0),D.over?"var(--lcdred)":undefined);
+  const lit=Math.round(Math.min(1,D.v/(D.top*1.1))*30);if(lit!==this.lastLit){this.lastLit=lit;this.arc.forEach((p,i)=>{const c=i<lit?(i>=27?"var(--lcdred)":i>=21?"var(--lcdamber)":"var(--acc)"):"var(--ghost)";
+    p.style.fill=c;p.style.filter=i<lit?`drop-shadow(0 0 4px color-mix(in srgb,${c} 60%,transparent))`:"none"})}
+  const on=S.gps?0:Math.ceil(S.soc/5-0.01);this.eb.forEach((b,i)=>b.classList.toggle("on",i<on));
+  $("c-ebar").className="ebar"+(S.soc<15?" crit":S.soc<35?" low":"");
+  this.pct.set(S.gps?"---":fmt(S.soc,3,0),S.soc<15?"var(--lcdred)":S.soc<35?"var(--lcdamber)":"var(--lcdgreen)");
+  $("c-u").textContent=sU();this.gear.set(String(gear+1));$("c-gname").textContent=GEAR_NAMES[gear];
+  const mo=$("c-mot");mo.textContent=dualOn()?"DUAL":"SINGLE";mo.className="mot"+(dualOn()?" d":"");
+  const pw=$("c-pw");pw.textContent=Math.round(S.power)+" W";pw.className="pw"+(S.power<-5?" regen":"");
+  $("c-olab").textContent=odoMode==="odo"?"ODO":"TRIP";$("c-ohint").textContent=odoMode==="odo"?"Tap for trip":"Tap for odometer";$("c-ou").textContent=dU();
+  this.odo.set(odoMode==="odo"?fmt(odo*K(),5,0,true):fmt(S.trip*K(),5,1,true));
+  const G3=S.gps;this.mv.set(G3?"---":fmt(S.volt,3,1));this.ma.set(G3?"---":fmt(S.ibat,3,1));this.mr.set(G3?"---":fmt(D.range,3,0));$("c-ru").textContent=dU();
+  this.mtm.set(G3?"---":fmt(D.tmot,3,0),tempCol(D.tmot,75,100));this.mtc.set(G3?"---":fmt(D.tfet,3,0),tempCol(D.tfet,60,80));this.md.set(G3?"---":fmt(D.duty*100,3,0),D.duty>.9?"var(--lcdamber)":undefined);
+  faultBox($("c-fault"))}};
+
+/* ================= STYLE 2: WIDE COCKPIT ================= */
+const Wide={
+ build(root){root.innerHTML=`<div class="wide"><div class="scr">
+  <span class="tri l" id="w-tl"></span><span class="tri r" id="w-tr"></span>
+  <div class="info"><span id="w-v"></span><span id="w-p"></span><span id="w-t"></span></div>
+  <div class="mid">
+   <div class="ics"><span id="w-cr" class="off">${icon.cruise}</span><span id="w-li" class="off" style="color:#56E36F">${icon.light}</span><span id="w-rd" class="off" style="color:#56E36F">${icon.ready}</span><span id="w-du" class="off" style="color:var(--or)">${icon.dual}</span></div>
+   <svg class="ws" id="w-spd"></svg>
+   <div class="uu"><span id="w-mph">mph</span><span id="w-kmh">kmh</span></div>
+  </div>
+  <div class="bot">
+   <div class="modeline">mode <span class="pill" id="w-mode"></span><span class="mm" id="w-mm"></span></div><div></div>
+   <div class="batt">${icon.bolt}<div class="bb" id="w-bb"></div></div>
+   <div class="od"><svg id="w-od"></svg><span id="w-odu"></span></div>
+   <div class="btns"><button id="w-light">light</button><button id="w-mode-b">mode</button><button id="w-set">set</button></div>
+  </div>
+  <div class="fault" id="w-fault"></div>
+ </div><div class="mounts"><i></i><i></i></div></div>
+ <div class="under">
+  <div><label>Battery</label><b id="u-soc"></b></div><div><label>Range</label><b id="u-r"></b></div><div><label>Trip</label><b id="u-t"></b></div><div><label>Motor</label><b id="u-m"></b></div>
+ </div>`;
+  this.spd=Seg($("w-spd"),3,{color:"#F2F4F5",ghost:"rgba(242,244,245,.045)"});
+  this.od=Seg($("w-od"),5,{color:"#F2F4F5",ghost:"rgba(242,244,245,.06)",dp:true,align:"xMinYMid meet"});
+  const bb=$("w-bb");this.bb=[];for(let i=0;i<10;i++){const b=document.createElement("i");bb.appendChild(b);this.bb.push(b)}
+  $("w-light").onclick=()=>setLight(!light);$("w-mode-b").onclick=()=>setGear((gear+1)%3);$("w-set").onclick=()=>show("set");
+  $("w-od").parentElement.onclick=toggleOdo},
+ update(D){
+  this.spd.set(fmt(D.v,3,0),D.over?"#FF4D40":undefined);
+  $("w-tl").classList.toggle("on",D.over);$("w-tr").classList.toggle("on",D.over||!!S.fault);
+  $("w-mph").classList.toggle("on",G.units==="mi");$("w-kmh").classList.toggle("on",G.units!=="mi");
+  $("w-cr").classList.toggle("off",!cruise);$("w-li").classList.toggle("off",!light);$("w-rd").classList.toggle("off",!(live||throttle||S.speed>0.5));$("w-du").classList.toggle("off",!dualOn());
+  $("w-mode").textContent=WIDE_NAMES[gear];$("w-mm").textContent=dualOn()?"2M":"1M";
+  const on=S.gps?0:Math.ceil(S.soc/10-0.01);this.bb.forEach((b,i)=>b.classList.toggle("on",i<on));$("w-bb").className="bb"+(S.soc<15?" crit":"");
+  this.od.set(odoMode==="odo"?fmt(odo*K(),5,0,true):fmt(S.trip*K(),5,1,true));
+  $("w-odu").innerHTML=(odoMode==="odo"?"ODO":"TRIP")+"<br>"+dU();
+  $("w-v").textContent=(limit>0?"MAX "+Math.round(limit*K())+"  ":"")+S.volt.toFixed(1)+"V";$("w-p").textContent=Math.round(S.power)+"W";$("w-t").textContent=Math.round(D.tmot)+"°";
+  $("w-light").classList.toggle("on",light);
+  $("u-soc").innerHTML=S.gps?"GPS":Math.round(S.soc)+"<small>%</small>";$("u-r").innerHTML=S.gps?"–":Math.round(D.range)+"<small>"+dU()+"</small>";
+  $("u-t").innerHTML=(S.trip*K()).toFixed(1)+"<small>"+dU()+"</small>";$("u-m").innerHTML=Math.round(D.tmot)+"<small>°C</small>";
+  faultBox($("w-fault"))}};
+
+/* ================= STYLE 3: VESC DATA ================= */
+function Gauge(el,o){
+  let ticks="";for(let i=0;i<=10;i++){const ang=(150+24*i)*Math.PI/180,r1=i%5?34:31,r2=37;
+    ticks+=`<line x1="${60+Math.cos(ang)*r1}" y1="${62+Math.sin(ang)*r1}" x2="${60+Math.cos(ang)*r2}" y2="${62+Math.sin(ang)*r2}" stroke="#4A5562" stroke-width="${i%5?1.2:2}" stroke-linecap="round"/>`}
+  el.innerHTML=`<svg viewBox="0 0 120 112">
+  <path d="M20.2 85 A46 46 0 1 1 99.8 85" fill="none" stroke="#2F3741" stroke-width="9" stroke-linecap="round" pathLength="100"/>
+  ${ticks}
+  <path class="gv" d="M20.2 85 A46 46 0 1 1 99.8 85" fill="none" style="stroke:${o.color};filter:drop-shadow(0 0 3px ${o.color})" stroke-width="9" stroke-linecap="round" pathLength="100" stroke-dasharray="0 100"/>
+  <text x="60" y="${o.big?67:65}" text-anchor="middle" fill="#F0F3F6" font-family="Barlow Semi Condensed,Arial Narrow,sans-serif" font-weight="700" font-size="${o.big?30:23}" class="gt">0</text>
+  <text x="60" y="81" text-anchor="middle" fill="#9AA6B2" font-family="Barlow Semi Condensed,Arial Narrow,sans-serif" font-weight="600" font-size="10.5" class="gu">${o.unit}</text>
+  <text x="22" y="101" text-anchor="middle" fill="#5E6873" font-family="Barlow Semi Condensed,Arial Narrow,sans-serif" font-size="9" class="gmin"></text>
+  <text x="98" y="101" text-anchor="middle" fill="#5E6873" font-family="Barlow Semi Condensed,Arial Narrow,sans-serif" font-size="9" class="gmax"></text>
+  <text x="60" y="107" text-anchor="middle" fill="#9AA6B2" font-family="Barlow Semi Condensed,Arial Narrow,sans-serif" font-weight="600" font-size="11.5">${o.label}</text></svg>`;
+  const q=c=>el.querySelector(c),gv=q(".gv"),gt=q(".gt"),gu=q(".gu"),gmin=q(".gmin"),gmax=q(".gmax");let lastR="";
+  return{set(val,max,min=0,unit){const r=max-min||1,f=Math.max(0,Math.min(1,(val-min)/r)),z=Math.max(0,Math.min(1,(0-min)/r));
+    const a=Math.min(f,z)*100,b=Math.max(f,z)*100;gv.setAttribute("stroke-dasharray",`0 ${a} ${Math.max(.01,b-a)} 200`);
+    const col=val<0?"#4FC3F7":(o.warn&&f>o.warn?"#FF6B5E":o.color);gv.style.stroke=col;gv.style.filter=`drop-shadow(0 0 3px ${col})`;
+    gt.textContent=(o.dec?val.toFixed(o.dec):Math.round(val));if(unit)gu.textContent=unit;
+    const rk=min+"|"+max;if(rk!==lastR){lastR=rk;gmin.textContent=Math.round(min);gmax.textContent=Math.round(max)}}}}
+const Vesc={
+ build(root){root.innerHTML=`<div class="vesc">
+  <div class="vh"><span><b id="v-name"></b> · <span id="v-gear"></span></span><span class="st"><i id="v-dot"></i><span id="v-st"></span></span></div>
+  <div class="vgrid">
+   <div class="vg big" id="g-spd"></div><div class="vg" id="g-duty"></div><div class="vg" id="g-pow"></div>
+   <div class="vg" id="g-ib"></div><div class="vg" id="g-im"></div><div class="vg" id="g-soc"></div>
+  </div>
+  <table class="vtab"><thead><tr><th></th><th>Motor A</th><th>Batt A</th><th>Duty</th><th>Mot °C</th><th>FET °C</th></tr></thead><tbody id="v-tb"></tbody></table>
+  <div class="vstrip">
+   <div><label>Voltage</label><b id="v-v"></b></div><div><label>Per cell</label><b id="v-c"></b></div><div><label>Used</label><b id="v-wh"></b></div><div><label>Range</label><b id="v-r"></b></div>
+  </div>
+  <div class="vbars">
+   <div class="vbar"><label>Front temp<b id="vb-f"></b></label><div class="t"><i id="vb-fi"></i></div></div>
+   <div class="vbar"><label>Rear temp<b id="vb-r"></b></label><div class="t"><i id="vb-ri"></i></div></div>
+  </div>
+  <div class="fault" id="v-fault"></div></div>`;
+  this.g={spd:Gauge($("g-spd"),{label:"Speed",unit:"km/h",color:"var(--vacc,#4FC3F7)",big:true}),duty:Gauge($("g-duty"),{label:"Duty",unit:"%",color:"#81C784",warn:.85}),
+   pow:Gauge($("g-pow"),{label:"Power",unit:"W",color:"#FFB74D"}),ib:Gauge($("g-ib"),{label:"Battery",unit:"A",color:"#E57373",dec:1}),
+   im:Gauge($("g-im"),{label:"Motor",unit:"A",color:"#BA68C8",dec:0}),soc:Gauge($("g-soc"),{label:"Battery",unit:"%",color:"#81C784"})}},
+ update(D){
+  $("v-name").textContent=cfg.brand+" "+cfg.name;$("v-gear").textContent="Gear "+(gear+1)+" · "+(dualOn()?"Dual":"Single")+(limit>0?" · Max "+Math.round(limit*K()):"");
+  $("v-dot").className=live?"live":"";$("v-st").textContent=live?"Live · "+(conn&&conn.kind==="usb"?"USB":conn&&conn.kind==="gps"?"GPS":"Bluetooth"):"Beta";
+  const g=this.g,pk=peakTotal(),ipk=pk/Math.max(S.volt,1)*1.2;
+  g.spd.set(D.v,D.top*1.1,0,sU());g.duty.set(D.duty*100,100);g.pow.set(S.power,pk,-pk*.3);g.ib.set(S.ibat,ipk,-ipk*.3);g.im.set(D.imot,ipk*2.5,-ipk*.6);g.soc.set(S.soc,100);
+  const tc=(t,w,h)=>t>h?"h":t>w?"w":"";
+  const row=(n,m,on)=>`<tr><td>${n}</td><td class="${on?"":"dim"}">${m.imot.toFixed(1)}</td><td class="${on?"":"dim"}">${m.ibat.toFixed(1)}</td><td class="${on?"":"dim"}">${Math.round(Math.abs(m.duty)*100)}%</td><td class="${tc(m.tmot,75,100)}">${Math.round(m.tmot)}</td><td class="${tc(m.tfet,60,80)}">${Math.round(m.tfet)}</td></tr>`;
+  const tb=(id,m,show)=>{const t=Math.max(m.tmot,m.tfet),f=Math.min(1,Math.max(0,(t-20)/90));$(id).textContent=show?Math.round(t)+"°C":"–";const i=$(id+"i");i.style.width=(show?f*100:0)+"%";i.style.background=t>90?"#FF6B5E":t>65?"#FFB74D":"#81C784"};
+  tb("vb-f",S.m1,true);tb("vb-r",S.m2,cfg.motors===2);
+  $("v-tb").innerHTML=row("Front",S.m1,true)+(cfg.motors===2?row("Rear",S.m2,dualOn()):"");
+  $("v-v").innerHTML=S.volt.toFixed(1)+"<small>V</small>";$("v-c").innerHTML=(S.volt/cfg.cells).toFixed(2)+"<small>V</small>";
+  $("v-wh").innerHTML=Math.round(S.wh)+"<small>Wh</small>";$("v-r").innerHTML=Math.round(D.range)+"<small>"+dU()+"</small>";
+  faultBox($("v-fault"))}};
+
+const Big={
+ build(root){root.innerHTML=`<div class="bigs">
+  <div class="t"><span class="gr"><span class="gn" id="b-g"></span><span id="b-gn"></span><span class="mo" id="b-mo"></span></span><span class="icons"><span id="b-li" class="off">${icon.light}</span><span id="b-bt" class="bt off">${icon.bt}</span><span id="b-clock"></span></span></div>
+  <svg class="bspd" id="b-spd"></svg><div class="bu" id="b-u"></div>
+  <div class="bar" id="b-bar"><i id="b-fill"></i></div>
+  <div class="row"><span id="b-soc"></span><span id="b-pw"></span><span id="b-r"></span></div>
+  <div class="fault" id="b-fault"></div></div>`;
+  this.spd=Seg($("b-spd"),3,{align:"xMidYMid meet"})},
+ update(D){this.spd.set(fmt(D.v,3,0),D.over?"var(--lcdred)":undefined);
+  $("b-g").textContent=gear+1;$("b-gn").textContent=GEAR_NAMES[gear];$("b-mo").textContent=dualOn()?"DUAL":"SINGLE";
+  $("b-li").classList.toggle("off",!light);$("b-bt").classList.toggle("off",!(live&&activeProto!=="gps"));$("b-clock").innerHTML=(limit>0?`<span class="limtag" style="margin-right:6px">MAX ${Math.round(limit*K())}</span>`:"")+clock();$("b-u").textContent=sU();
+  $("b-fill").style.width=(S.gps?0:S.soc)+"%";$("b-bar").className="bar"+(S.soc<15?" crit":"");
+  if(S.gps){$("b-soc").innerHTML="GPS<small>±"+Math.round(S.gpsAcc||0)+" m</small>";$("b-pw").innerHTML=(S.trip*K()).toFixed(1)+"<small>"+dU()+"</small>";$("b-r").innerHTML=Math.round(S.max*K())+"<small>max</small>"}
+  else{$("b-soc").innerHTML=Math.round(S.soc)+"<small>%</small>";$("b-pw").innerHTML=Math.round(S.power)+"<small>W</small>";$("b-r").innerHTML=Math.round(D.range)+"<small>"+dU()+" left</small>"}
+  faultBox($("b-fault"))}};
+const STYLES={classic:Classic,wide:Wide,vesc:Vesc,big:Big};let style=STYLES[G.style]||Classic;
+function faultBox(el){if(live&&activeProto!=="vesc"&&S.err){el.style.display="block";el.textContent="Scooter error code "+S.err;return}if(S.fault){el.style.display="block";el.textContent="Fault: "+(FAULTS[S.fault]||"code "+S.fault)}else el.style.display="none"}
+function applyColor(){const d=$("disp");["--acc","--or","--vacc"].forEach(k=>G.color&&G.color!=="auto"?d.style.setProperty(k,G.color):d.style.removeProperty(k))}
+function buildStyle(){style=STYLES[G.style]||Classic;applyColor();style.build($("disp"));document.querySelectorAll(".scard").forEach(b=>b.setAttribute("aria-pressed",b.dataset.s===G.style));render()}
+
+/* ---------- render (all) ---------- */
+function render(){const D=data();style.update(D);
+  document.querySelectorAll("#gearSegs button").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.g===gear));
+  document.querySelectorAll("#motSegs button").forEach(b=>{b.setAttribute("aria-pressed",(+b.dataset.m===2)===dualOn());b.disabled=cfg.motors===1&&b.dataset.m==="2"});
+  $("cruiseBtn").setAttribute("aria-pressed",!!cruise);$("lightBtn").setAttribute("aria-pressed",light);
+  alarm(D.alert);
+  const k=K();$("sDist").textContent=(S.trip*k).toFixed(2);
+  const t=Math.floor(S.time),hh=Math.floor(t/3600),mm=Math.floor(t/60)%60,ss=String(t%60).padStart(2,"0");$("sTime").textContent=hh?`${hh}:${String(mm).padStart(2,"0")}:${ss}`:`${mm}:${ss}`;
+  $("sAvg").textContent=S.time>5?Math.round(S.trip/(S.time/3600)*k):0;$("sMax").textContent=Math.round(S.max*k);$("sWh").textContent=Math.round(S.wh);
+  $("sEff").textContent=S.trip>0.1?(S.wh/(S.trip*k)).toFixed(1):"–";$("sPk").textContent=Math.round(S.peakP);$("sOdo").textContent=Math.round(odo*k)}
+function cnote(){$("cnote").textContent=live&&activeProto==="gps"?"GPS speedometer: speed, distance and ride time from your phone. Works on any bike or scooter.":live&&activeProto!=="vesc"?"Stock controller (beta): read only. Gears and speed limit need a VESC.":live?(G.ctrlGears?"Gear and motor buttons change your VESC's limits.":"Gear and motor buttons are display only. Turn on \"Gears change the controller\" in Settings to send them to the VESC."):
+  cfg.motors===1?"Beta · This model has one motor. Hold the button to test the display.":"Beta · Hold the button to test the display. Connect a VESC in Settings for live data."}
+function renderMyVeh(){if(!$("mvImg"))return;const[bid,id]=modelKey.split(":"),ph=store.get("photo:"+modelKey,null),m=cfg,img=$("mvImg");
+  $("mvName").textContent=cfg.brand+" "+cfg.name;
+  $("mvSpec").textContent=(catOf(bid)==="bike"||id==="bike")?`${m.sys||"E-bike"} · ${Math.round(parseInt(m.volt)*m.ah)} Wh`:`${m.volt} ${m.ah}Ah · ${m.motors===2?"dual "+m.watt+"W ×2":m.watt+"W"} · ${m.top} km/h`;
+  if(ph){img.style.backgroundImage=`url(${ph})`;img.innerHTML=""}else{img.style.backgroundImage="";img.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:40px;height:40px"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>'}
+  $("mvDel").hidden=!ph;$("mvAddT").textContent=ph?"Change":"Add photo"}
+function applyAll(){setTimeout(renderMyVeh);document.querySelectorAll("#unitSeg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.u===G.units));
+  document.querySelectorAll(".du").forEach(e=>e.textContent=dU());document.querySelectorAll(".su").forEach(e=>e.textContent=sU());$("effU").textContent="Wh/"+dU();
+  $("ghMax").textContent="Top "+Math.round(cfg.top*K())+" "+sU();
+  ["Watt","Peak","Top","Poles","Cells","Ah","Wheel"].forEach(n=>$("f"+n).value=cfg[n.toLowerCase()]);
+  $("fCan").value=G.canId;$("fAlert").value=G.alert;for(let i=0;i<3;i++){$("gs"+i).value=G.gearPct[i];$("gp"+i).value=G.gearPow[i]}
+  document.querySelectorAll("#motCount button").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.n===cfg.motors));
+  document.querySelectorAll("#protoSeg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.p===(G.proto||"vesc")));$("ctrlSw").setAttribute("aria-checked",G.ctrlGears);$("limStoreSw").setAttribute("aria-checked",!!G.limitStore);limText();$("wakeSw").setAttribute("aria-checked",G.wake);
+  if(!live)S.volt=vFromSoc(S.soc);cnote();renderModels();render()}
+
+/* ---------- speed alarm ---------- */
+let actx=null,lastBeep=0;
+function alarm(on){if(!on)return;const n=performance.now();if(n-lastBeep<1200)return;lastBeep=n;
+  try{actx=actx||new(window.AudioContext||window.webkitAudioContext)();const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=1760;g.gain.setValueAtTime(.0001,actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.25,actx.currentTime+.01);g.gain.exponentialRampToValueAtTime(.0001,actx.currentTime+.18);o.connect(g).connect(actx.destination);o.start();o.stop(actx.currentTime+.2)}catch(e){}}
+
+/* ---------- graph ---------- */
+const cv=$("graph"),ctx=cv.getContext("2d"),HIST=300,hs=[],hp=[];const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function drawGraph(){const dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;if(!w)return;
+  if(cv.width!==Math.round(w*dpr)){cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr)}
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);ctx.strokeStyle=css("--line");ctx.lineWidth=1;for(let i=1;i<4;i++){ctx.beginPath();ctx.moveTo(0,h*i/4);ctx.lineTo(w,h*i/4);ctx.stroke()}
+  const n=hs.length;if(n<2)return;const dx=w/(HIST-1),off=HIST-n,mid=h*.75,pk=peakTotal();
+  ctx.beginPath();ctx.moveTo(off*dx,mid);hp.forEach((p,i)=>ctx.lineTo((off+i)*dx,mid-Math.max(-.3,Math.min(1,p/pk))*mid*.95));ctx.lineTo((off+n-1)*dx,mid);ctx.closePath();
+  ctx.fillStyle=css("--lcdlabel");ctx.globalAlpha=.25;ctx.fill();ctx.globalAlpha=1;
+  ctx.beginPath();hs.forEach((s,i)=>{const x=(off+i)*dx,y=h-Math.min(1,s/(cfg.top*1.1))*h*.95-2;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.strokeStyle=css("--accent");ctx.lineWidth=2.5;ctx.lineJoin="round";ctx.stroke()}
+
+/* ---------- demo physics ---------- */
+function simulate(dt){const m=95+(cfg.motors===2?15:0),v=S.speed/3.6,vmax=cruise?Math.min(cruise,spdLimit())/3.6:spdLimit()/3.6,lim=peakTotal()*G.gearPow[gear]/100;
+  const Pr=0.015*m*9.81*v,Pa=0.5*1.2*0.55*v*v*v;let a,P;
+  if((throttle||cruise)&&!brake){a=Math.max(v>vmax?-.3:0,3.2*(1-v/Math.max(vmax,.1)));if(cruise)a=Math.max(-.3,Math.min(1.5,(vmax-v)*2));
+    P=(Pr+Pa+m*a*v)/.85;if(P>lim){P=lim;a=(P*.85-Pr-Pa)/(m*Math.max(v,.5))}P=Math.max(P,0)}
+  else{if(brake)cruise=0;const db=brake?3.5:.35;a=v>0?-(Pr+Pa)/(m*Math.max(v,.5))-db:0;P=v>1?-Math.min(peakTotal()*(brake?.35:.12),m*db*v*.4):0}
+  S.speed=Math.max(0,v+a*dt)*3.6;S.power+=(P-S.power)*Math.min(1,dt*6);
+  const vN=vFromSoc(S.soc);S.ibat=S.power/vN;S.volt=vN-S.ibat*.09*(13/cfg.cells);
+  const duty=Math.min(.95,S.speed/(cfg.top*1.15)),heat=Math.max(0,S.power)/peakTotal(),n=dualOn()?2:1;
+  [S.m1,S.m2].forEach((mm,i)=>{const act=i===0||dualOn();mm.duty=act?duty:0;mm.ibat=act?S.ibat/n:0;mm.imot=mm.ibat/Math.max(duty,.12);
+    mm.tmot+=((act?heat*1.6:0)-(mm.tmot-24)*.012)*dt;mm.tfet+=((act?heat*1.1:0)-(mm.tfet-24)*.02)*dt});
+  const d=S.speed*dt/3600;S.trip+=d;odo+=d;S.wh+=S.power*dt/3600;S.soc=Math.max(0,Math.min(100,S.soc-(S.power*dt/3600)/(cfg.ah*cfg.cells*3.7)*100));if(S.speed>.5)S.time+=dt}
+let last=performance.now(),acc=0;
+function tick(now){const dt=Math.min(.1,(now-last)/1000);last=now;if(!live)simulate(dt);
+  S.max=Math.max(S.max,S.speed);S.peakP=Math.max(S.peakP,S.power);acc+=dt;
+  if(acc>=.2){acc=0;hs.push(S.speed);hp.push(S.power);if(hs.length>HIST){hs.shift();hp.shift()}render();if($("v-dash").classList.contains("active"))drawGraph()}
+  requestAnimationFrame(tick)}
+setInterval(()=>store.set("odo",odo),5000);
+
+/* ---------- VESC protocol ---------- */
+const NUS="6e400001-b5a3-f393-e0a9-e50e24dcca9e",RX="6e400002-b5a3-f393-e0a9-e50e24dcca9e",TX="6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+const COMM_GET_VALUES=4,COMM_FORWARD_CAN=34,COMM_SET_MCCONF_TEMP=48;
+function crc16(d){let c=0;for(const b of d){c^=b<<8;for(let i=0;i<8;i++)c=c&0x8000?((c<<1)^0x1021)&0xffff:(c<<1)&0xffff}return c}
+function packet(p){const c=crc16(p);return new Uint8Array([2,p.length,...p,c>>8,c&255,3])}
+function f32(v){const b=new DataView(new ArrayBuffer(4));b.setFloat32(0,v,false);return[...new Uint8Array(b.buffer)]}
+let buf=new Uint8Array(0),tach0=null,wh0=0,whc0=0,lastLive=0,poll=null,turn="m",pending="m";
+function onBytes(chunk){if(activeProto!=="vesc")return onStock(chunk);const n=new Uint8Array(buf.length+chunk.length);n.set(buf);n.set(chunk,buf.length);buf=n;
+  while(buf.length>=5){const st=buf.indexOf(2);if(st<0){buf=new Uint8Array(0);return}if(st>0)buf=buf.slice(st);
+    const len=buf[1];if(buf.length<len+5)return;const pl=buf.slice(2,2+len),crc=(buf[2+len]<<8)|buf[3+len];
+    if(buf[4+len]===3&&crc16(pl)===crc){parse(pl);buf=buf.slice(len+5)}else buf=buf.slice(1)}}
+function parse(p){if(p[0]!==COMM_GET_VALUES||p.length<54)return;const dv=new DataView(p.buffer,p.byteOffset,p.byteLength);let i=1;
+  const i16=s=>{const v=dv.getInt16(i);i+=2;return v/s},i32=s=>{const v=dv.getInt32(i);i+=4;return v/s};
+  const r={};r.tfet=i16(10);r.tmot=i16(10);r.imot=i32(100);r.ibat=i32(100);i32(100);i32(100);r.duty=i16(1000);r.erpm=i32(1);
+  r.volt=i16(10);i32(1e4);i32(1e4);r.wh=i32(1e4);r.whc=i32(1e4);i32(1);r.tach=i32(1);r.fault=p.length>i?dv.getUint8(i):0;
+  const now=performance.now(),target=pending==="s"?S.m2:S.m1;Object.assign(target,{tfet:r.tfet,tmot:r.tmot,imot:r.imot,ibat:r.ibat,duty:r.duty,fresh:now});
+  if(pending==="s"){if(r.fault)S.fault=r.fault;combine();return}
+  S.fault=r.fault;S.volt=r.volt;S.soc=socFromV(r.volt);S.speed=Math.abs(r.erpm/cfg.poles)*circ()*60/1000;
+  if(tach0===null){tach0=r.tach;wh0=r.wh;whc0=r.whc}
+  const dist=(r.tach-tach0)/(cfg.poles*6)*circ()/1000;if(dist>S.trip){odo+=dist-S.trip;S.trip=dist}
+  S.wh=(r.wh-wh0)-(r.whc-whc0);if(S.speed>.5&&lastLive)S.time+=(now-lastLive)/1000;lastLive=now;combine()}
+function combine(){const m2ok=cfg.motors===2&&performance.now()-S.m2.fresh<1500;S.ibat=S.m1.ibat+(m2ok?S.m2.ibat:0);S.power=S.volt*S.ibat}
+function tempConf(curScale,speedKmh,keep){const erpm=speedKmh/3.6/circ()*60*cfg.poles;
+  return[COMM_SET_MCCONF_TEMP,keep?1:0,0,0,0,...f32(1),...f32(curScale),...f32(-erpm),...f32(erpm),...f32(0.005),...f32(0.95),...f32(-1.5e6),...f32(1.5e6)]}
+function sendLimits(force){if(live&&activeProto!=="vesc"){if(force)toast("Speed change works only with VESC controllers");return false}
+  if(!live||!conn||!(G.ctrlGears||force))return false;
+  const sc=G.ctrlGears?G.gearPow[gear]/100:1,spd=G.ctrlGears?spdLimit():(limit>0?limit:cfg.top),keep=force&&G.limitStore;
+  conn.write(packet(tempConf(sc,spd,keep)));
+  if(cfg.motors===2)conn.write(packet([COMM_FORWARD_CAN,G.canId,...tempConf(dual||!G.ctrlGears?sc:0,spd,keep)]));
+  toast(force?"Speed limit "+(limit>0?Math.round(limit*K())+" "+sU():"off")+" sent to VESC"+(keep?" and saved":""):"Gear "+(gear+1)+(cfg.motors===2?(dual?" · dual":" · single"):"")+" sent to VESC");return true}
+function limText(){$("limVal").innerHTML=limit>0?Math.round(limit*K())+"<small>"+sU()+"</small>":"Off<small>top "+Math.round(cfg.top*K())+" "+sU()+"</small>";$("limApply").hidden=!live||activeProto!=="vesc"}
+function setLimit(v){if(v>=cfg.top)v=0;else v=Math.max(6,v);limit=v;store.set("limit:"+modelKey,v);limText();render()}
+function stepLimit(d){const cur=limit>0?limit:cfg.top;setLimit(Math.round(cur+d))}
+[["limDown",-1],["limUp",1]].forEach(([id,d])=>{const b=$(id);let t=null,r=null;const stop=()=>{clearTimeout(t);clearInterval(r)};
+  b.addEventListener("pointerdown",e=>{e.preventDefault();stepLimit(d);t=setTimeout(()=>{r=setInterval(()=>stepLimit(d*(limit>0&&limit<cfg.top-5?2:1)),90)},420)});
+  ["pointerup","pointerleave","pointercancel"].forEach(v=>b.addEventListener(v,stop))});
+$("limApply").onclick=()=>{if(sendLimits(true))hap("HEAVY")};
+
+const Cap=window.Capacitor,NATIVE=!!(Cap&&Cap.isNativePlatform&&Cap.isNativePlatform()),NBLE=NATIVE&&Cap.Plugins&&Cap.Plugins.BluetoothLe;
+const hex=b=>Array.from(b,x=>x.toString(16).padStart(2,"0")).join(" "),unhex=s=>new Uint8Array(String(s).trim().split(/\s+/).filter(Boolean).map(x=>parseInt(x,16)));
+let conn=null;
+/* ---------- stock controllers (beta): Xiaomi M365 & Ninebot serial protocols, read only ---------- */
+let activeProto="vesc",sbuf=new Uint8Array(0);
+function cs16(a){let t=0;for(const b of a)t+=b;return(t^0xFFFF)&0xFFFF}
+function stockReq(){const body=activeProto==="xiaomi"?[0x03,0x20,0x01,0xB0,0x20]:[0x01,0x3E,0x20,0x01,0xB0,0x20],c=cs16(body);
+  return new Uint8Array([...(activeProto==="xiaomi"?[0x55,0xAA]:[0x5A,0xA5]),...body,c&255,c>>8])}
+function onStock(chunk){const n=new Uint8Array(sbuf.length+chunk.length);n.set(sbuf);n.set(chunk,sbuf.length);sbuf=n;
+  const x=activeProto==="xiaomi",h0=x?0x55:0x5A,h1=x?0xAA:0xA5;
+  for(;;){let i=-1;for(let k=0;k<sbuf.length-1;k++)if(sbuf[k]===h0&&sbuf[k+1]===h1){i=k;break}
+    if(i<0){sbuf=sbuf.slice(-1);return}if(sbuf.length<i+3)return;
+    const L=sbuf[i+2],tot=x?L+6:L+9;if(sbuf.length<i+tot)return;
+    const f=sbuf.slice(i,i+tot),c=f[tot-2]|(f[tot-1]<<8);
+    if(cs16(f.slice(2,tot-2))===c){parseStock(f,x);sbuf=sbuf.slice(i+tot)}else sbuf=sbuf.slice(i+1)}}
+function parseStock(f,x){const arg=x?f[5]:f[6],d=x?f.slice(6,f.length-2):f.slice(7,f.length-2);if(arg!==0xB0||d.length<24)return;
+  const w=i=>d[i*2]|(d[i*2+1]<<8),sw=i=>{const v=w(i);return v>32767?v-65536:v};
+  S.err=w(0);S.soc=Math.min(100,w(4));let sp=Math.abs(sw(5))/1000;if(sp>150)sp/=10;S.speed=sp;
+  const odoM=(w(7)|(w(8)<<16))>>>0;if(odoM>0)odo=odoM/1000;S.trip=w(9)*10/1000;
+  S.m1.tfet=sw(11)/10;S.m1.tmot=S.m1.tfet;S.volt=vFromSoc(S.soc);S.power=0;S.ibat=0;
+  const now=performance.now();if(S.speed>.5&&lastLive)S.time+=(now-lastLive)/1000;lastLive=now}
+
+/* ---------- scanner (beta): record any scooter's Bluetooth data ---------- */
+const U16=u=>"0000"+u+"-0000-1000-8000-00805f9b34fb";
+const SCAN_SVCS=[NUS,...["ffe0","fff0","ffe5","fee7","ae00","ff00","ffd0","fef5","1800","180a","180f"].map(U16)];
+let scanLines=[],scan=null;
+const shortU=u=>/^0000....-0000-1000-8000-00805f9b34fb$/i.test(u)?u.slice(4,8):u;
+const asc=b=>{const t=Array.from(b,c=>c>31&&c<127?String.fromCharCode(c):".").join("");return/[A-Za-z0-9]{3}/.test(t)?'  "'+t+'"':""};
+function slog(t){const d=new Date();scanLines.push(String(d.getMinutes()).padStart(2,"0")+":"+String(d.getSeconds()).padStart(2,"0")+"."+String(d.getMilliseconds()).padStart(3,"0")+" "+t);
+  if(scanLines.length>800)scanLines.splice(0,scanLines.length-800);const el=$("scanLog");el.textContent=scanLines.join("\n");el.scrollTop=el.scrollHeight}
+function scanState(on){$("scanDot").className=on?"on":"";$("scanSt").textContent=on?"Recording… ride, change gears, turn lights on and off":"Not connected";$("scanBtn").textContent=on?"Stop scan":"Scan a scooter";if(!on)scan=null}
+const toBytes=v=>typeof v==="string"?unhex(v):new Uint8Array(v.buffer||v);
+async function scanWeb(){const dev=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:SCAN_SVCS});
+  slog("Device: "+(dev.name||"(no name)")+" · model "+cfg.brand+" "+cfg.name);const srv=await dev.gatt.connect();
+  dev.addEventListener("gattserverdisconnected",()=>{slog("Disconnected");scanState(false)});
+  let svcs=[];try{svcs=await srv.getPrimaryServices()}catch(e){slog("No known services found")}
+  for(const sv of svcs){slog("Service "+shortU(sv.uuid));let chs=[];try{chs=await sv.getCharacteristics()}catch(e){}
+    for(const c of chs){const p=c.properties,fl=["read","write","writeWithoutResponse","notify","indicate"].filter(k=>p[k]).join(",");slog("  Char "+shortU(c.uuid)+" ["+fl+"]");
+      if(p.read){try{const v=new Uint8Array((await c.readValue()).buffer);slog("  read "+shortU(c.uuid)+": "+hex(v)+asc(v))}catch(e){}}
+      if(p.notify||p.indicate){try{await c.startNotifications();c.addEventListener("characteristicvaluechanged",e=>{const v=new Uint8Array(e.target.value.buffer);slog("◀ "+shortU(c.uuid)+" "+hex(v)+asc(v))})}catch(e){slog("  can't listen: "+e.message)}}}}
+  return{close:()=>dev.gatt.connected&&dev.gatt.disconnect()}}
+async function scanNative(){await NBLE.initialize();const d=await NBLE.requestDevice({optionalServices:SCAN_SVCS});const id=d.deviceId;
+  slog("Device: "+(d.name||"(no name)")+" · model "+cfg.brand+" "+cfg.name);
+  await NBLE.addListener("disconnected|"+id,()=>{slog("Disconnected");scanState(false)});await NBLE.connect({deviceId:id,timeout:10000});
+  const r=await NBLE.getServices({deviceId:id});
+  for(const sv of(r.services||[])){slog("Service "+shortU(sv.uuid));
+    for(const c of(sv.characteristics||[])){const p=c.properties||{},fl=["read","write","writeWithoutResponse","notify","indicate"].filter(k=>p[k]).join(",");slog("  Char "+shortU(c.uuid)+" ["+fl+"]");
+      if(p.read){try{const v=toBytes((await NBLE.read({deviceId:id,service:sv.uuid,characteristic:c.uuid})).value);slog("  read "+shortU(c.uuid)+": "+hex(v)+asc(v))}catch(e){}}
+      if(p.notify||p.indicate){try{await NBLE.addListener(`notification|${id}|${sv.uuid}|${c.uuid}`,x=>{const v=toBytes(x.value);slog("◀ "+shortU(c.uuid)+" "+hex(v)+asc(v))});
+        await NBLE.startNotifications({deviceId:id,service:sv.uuid,characteristic:c.uuid})}catch(e){slog("  can't listen: "+(e.message||e))}}}}
+  return{close:()=>NBLE.disconnect({deviceId:id})}}
+
+async function connectNative(){await NBLE.initialize();const d=await NBLE.requestDevice(G.proto==="vesc"?{services:[NUS]}:{optionalServices:[NUS]});const id=d.deviceId;
+  await NBLE.addListener("disconnected|"+id,()=>{if(live){toast("Scooter disconnected");setLive(false)}});await NBLE.connect({deviceId:id,timeout:10000});
+  await NBLE.addListener(`notification|${id}|${NUS}|${TX}`,r=>{const v=r&&r.value;onBytes(typeof v==="string"?unhex(v):new Uint8Array(v.buffer||v))});
+  await NBLE.startNotifications({deviceId:id,service:NUS,characteristic:TX});
+  return{name:d.name,write:b=>NBLE.writeWithoutResponse({deviceId:id,service:NUS,characteristic:RX,value:hex(b)}).catch(()=>{}),close:()=>NBLE.disconnect({deviceId:id})}}
+async function connectWeb(){const dev=await navigator.bluetooth.requestDevice(G.proto==="vesc"?{filters:[{services:[NUS]}],optionalServices:[NUS]}:{filters:[{namePrefix:"MIScooter"},{namePrefix:"NBScooter"},{namePrefix:"Mi"},{namePrefix:"Ninebot"},{services:[NUS]}],optionalServices:[NUS]});
+  dev.addEventListener("gattserverdisconnected",()=>{if(live){toast("Scooter disconnected");setLive(false)}});
+  const svc=await(await dev.gatt.connect()).getPrimaryService(NUS),rx=await svc.getCharacteristic(RX),tx=await svc.getCharacteristic(TX);
+  await tx.startNotifications();tx.addEventListener("characteristicvaluechanged",e=>onBytes(new Uint8Array(e.target.value.buffer)));
+  let q=Promise.resolve();
+  return{name:dev.name,write:b=>{q=q.then(()=>(rx.writeValueWithoutResponse?rx.writeValueWithoutResponse(b):rx.writeValue(b))).catch(()=>{});return q},close:()=>dev.gatt.connected&&dev.gatt.disconnect()}}
+async function connectUsb(){
+  if(navigator.serial){const port=await navigator.serial.requestPort();await port.open({baudRate:115200});
+    const reader=port.readable.getReader(),writer=port.writable.getWriter();let open=true,q=Promise.resolve();
+    (async()=>{try{while(open){const{value,done}=await reader.read();if(done)break;if(value)onBytes(value)}}catch(e){}if(open&&live){toast("USB disconnected");setLive(false)}})();
+    return{name:"USB",write:b=>{q=q.then(()=>writer.write(b)).catch(()=>{});return q},
+      close:async()=>{open=false;try{await reader.cancel()}catch(e){}try{reader.releaseLock();writer.releaseLock();await port.close()}catch(e){}}}}
+  const dev=await navigator.usb.requestDevice({filters:[{vendorId:0x0483},{classCode:2},{classCode:0xEF}]});
+  await dev.open();if(!dev.configuration)await dev.selectConfiguration(1);
+  let ctrlIf=null,dataIf=null;
+  for(const itf of dev.configuration.interfaces){const al=itf.alternates[0];if(al.interfaceClass===2&&ctrlIf===null)ctrlIf=itf.interfaceNumber;if(al.interfaceClass===10&&!dataIf)dataIf=itf}
+  if(!dataIf)throw new Error("this USB device has no serial port");
+  if(ctrlIf!==null)try{await dev.claimInterface(ctrlIf)}catch(e){}
+  await dev.claimInterface(dataIf.interfaceNumber);
+  const eps=dataIf.alternates[0].endpoints,epIn=eps.find(e=>e.direction==="in"&&e.type==="bulk"),epOut=eps.find(e=>e.direction==="out"&&e.type==="bulk");
+  if(ctrlIf!==null){
+    try{await dev.controlTransferOut({requestType:"class",recipient:"interface",request:0x20,value:0,index:ctrlIf},new Uint8Array([0x00,0xC2,0x01,0x00,0,0,8]))}catch(e){}
+    try{await dev.controlTransferOut({requestType:"class",recipient:"interface",request:0x22,value:1,index:ctrlIf})}catch(e){}}
+  let open=true,q=Promise.resolve();
+  (async()=>{while(open){try{const r=await dev.transferIn(epIn.endpointNumber,epIn.packetSize||64);if(r.data&&r.data.byteLength)onBytes(new Uint8Array(r.data.buffer,r.data.byteOffset,r.data.byteLength))}catch(e){break}}
+    if(open&&live){toast("USB disconnected");setLive(false)}})();
+  navigator.usb.addEventListener("disconnect",e=>{if(e.device===dev&&live){toast("USB disconnected");setLive(false)}});
+  return{name:dev.productName||"USB",write:b=>{q=q.then(()=>dev.transferOut(epOut.endpointNumber,b)).catch(()=>{});return q},close:async()=>{open=false;try{await dev.close()}catch(e){}}}}
+const PLATFORM=Cap&&Cap.getPlatform?Cap.getPlatform():"web",NUSB=NATIVE&&PLATFORM==="android"&&Cap.Plugins&&Cap.Plugins.UsbSerial;
+async function connectUsbNative(){const r=await NUSB.connect();
+  const h1=await NUSB.addListener("data",d=>onBytes(unhex(d.value))),h2=await NUSB.addListener("disconnected",()=>{if(live){toast("USB disconnected");setLive(false)}});
+  return{name:r.name||"USB",write:b=>NUSB.write({value:hex(b)}).catch(()=>{}),close:async()=>{try{h1.remove();h2.remove()}catch(e){}await NUSB.disconnect()}}}
+const IS_IOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+const HAS_BT=!!(NBLE||navigator.bluetooth),HAS_USB=!!NUSB||(!NATIVE&&!!(navigator.serial||navigator.usb));
+/* ---------- GPS speedometer: works on any bike or scooter ---------- */
+let geoId=null,lastFix=null,lastFixT=0;
+function hav(a,b){const R=6371000,r=x=>x*Math.PI/180,dl=r(b.latitude-a.latitude),dn=r(b.longitude-a.longitude),
+  h=Math.sin(dl/2)**2+Math.cos(r(a.latitude))*Math.cos(r(b.latitude))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
+function onFix(pos){const c=pos.coords,t=pos.timestamp||Date.now();S.gpsAcc=c.accuracy;if(c.accuracy>35)return;
+  let sp=(c.speed!=null&&!isNaN(c.speed)&&c.speed>=0)?c.speed*3.6:null;
+  if(lastFix){const d=hav(lastFix,c),dt=(t-lastFix.t)/1000;if(dt>0){if(sp===null)sp=d/dt*3.6;
+      if(d>Math.max(3,c.accuracy*.5)){S.trip+=d/1000;odo+=d/1000;lastFix={latitude:c.latitude,longitude:c.longitude,t}}}}
+  else lastFix={latitude:c.latitude,longitude:c.longitude,t};
+  sp=sp||0;if(sp<2.5)sp=0;S.speed=S.speed*.35+sp*.65;if(S.speed>.5&&lastFixT)S.time+=(t-lastFixT)/1000;lastFixT=t}
+function connectGps(){return new Promise((res,rej)=>{if(!navigator.geolocation)return rej(new Error("GPS isn't available on this device"));let first=true;
+  geoId=navigator.geolocation.watchPosition(p=>{onFix(p);if(first){first=false;res({name:"GPS",write:()=>{},close:()=>{if(geoId!==null)navigator.geolocation.clearWatch(geoId);geoId=null}})}},
+    e=>{if(first){first=false;rej(new Error(e.code===1?"location permission was denied. Allow it in your phone's settings":"no GPS signal. Go outside and try again"))}},
+    {enableHighAccuracy:true,maximumAge:0,timeout:25000})})}
+setInterval(()=>{if(live&&activeProto==="gps"&&Date.now()-lastFixT>4000)S.speed=0},1000);
+async function connect(kind){
+  if(live){try{conn&&await conn.close()}catch(e){}setLive(false);toast("Disconnected");return}
+  if(kind==="bt"&&!HAS_BT){toast("Bluetooth isn't available here. Use Bluefy or the app.");return}
+  if(kind==="usb"&&!HAS_USB){toast(IS_IOS?"Apple doesn't let apps use USB data on iPhone. Use Bluetooth.":"USB needs the Android app, or Chrome on Android or a computer.");return}
+  const cb=$(kind==="usb"?"usbBtn":kind==="gps"?"gpsBtn":"btBtn");cb.classList.add("busy");cb.querySelector("b").textContent=kind==="gps"?"Finding…":"Connecting…";
+  if(kind==="gps"){try{conn=await connectGps();conn.kind="gps";activeProto="gps";S.gps=true;lastFix=null;lastFixT=0;
+      Object.assign(S,{trip:0,wh:0,time:0,max:0,peakP:0,speed:0,power:0,ibat:0,m1:blankM(),m2:blankM()});hs.length=hp.length=0;setLive(true);toast("GPS speedometer on")}
+    catch(e){connBtns();toast("GPS: "+(e.message||e))}return}
+  try{conn=kind==="usb"?(NUSB?await connectUsbNative():await connectUsb()):NBLE?await connectNative():await connectWeb();conn.kind=kind;
+    tach0=null;Object.assign(S,{trip:0,wh:0,time:0,max:0,peakP:0,m1:blankM(),m2:blankM()});hs.length=hp.length=0;lastLive=0;buf=new Uint8Array(0);
+    activeProto=kind==="usb"?"vesc":(G.proto||"vesc");sbuf=new Uint8Array(0);S.err=0;
+    if(activeProto!=="vesc"){setLive(true);toast("Connected to "+(conn.name||"scooter")+" (beta)");poll=setInterval(()=>conn.write(stockReq()),250);return}
+    setLive(true);toast("Connected to "+(conn.name||"VESC")+(kind==="usb"?" by USB":""));sendLimits();
+    poll=setInterval(()=>{if(cfg.motors===2&&turn==="s"){pending="s";conn.write(packet([COMM_FORWARD_CAN,G.canId,COMM_GET_VALUES]));turn="m"}
+      else{pending="m";conn.write(packet([COMM_GET_VALUES]));turn=cfg.motors===2?"s":"m"}},110)}
+  catch(e){connBtns();const m=String(e&&e.message||e);if(!/cancel|NotFound|No device selected|chooser/i.test(m))toast("Couldn't connect: "+m)}}
+function connBtns(){const k=live&&conn?conn.kind:null;
+  [["bt","btBtn","Bluetooth"],["usb","usbBtn","USB cable"],["gps","gpsBtn","GPS"]].forEach(([kind,id,label])=>{const b=$(id);b.classList.remove("busy");
+    b.querySelector("b").textContent=k===kind?"Disconnect":label;if(kind==="usb")$("usbSub").textContent=IS_IOS&&!NUSB?"Not on iPhone":"VESC · Android & PC";b.disabled=(!!k&&k!==kind)||(kind==="usb"&&IS_IOS&&!NUSB);
+    b.className="btn ctile"+((k===kind)||(!k&&kind==="bt")?" primary":"")})}
+function setLive(on){const was=live;live=on;if(!on){if(geoId!==null){navigator.geolocation.clearWatch(geoId);geoId=null}S.gps=false;clearInterval(poll);if(was)saveRide();S.speed=0;S.power=0;S.fault=0;cruise=0}
+  $("demoCtrls").style.display=on?"none":"block";connBtns();limText();cnote();render()}
+$("bleNote").innerHTML="<b>GPS</b> works on every phone and every bike or scooter, including e-bikes: live speed, distance and ride time from the phone's location.<br><b>Bluetooth</b> works on iPhone and Android: "+(HAS_BT?"turn the scooter on and pick its VESC Bluetooth module.":"Safari can't use Bluetooth, so open this page in <b>Bluefy</b> or use the App Store app.")+
+  "<br><b>USB cable</b> works on Android phones (Samsung, Xiaomi, Pixel, OnePlus and others) with a USB-C cable or OTG adapter"+(NUSB?".":", in the Android app or in Chrome.")+
+  " It also works on computers in Chrome. <b>iPhone can't use USB</b>, not even USB-C models, because Apple doesn't let apps open USB serial devices. Use Bluetooth on iPhone."+
+  "<br>Live data, gears and the speed limit work with <b>VESC-based controllers</b>, including scooters converted to VESC. Stock controllers from Kukirin, Dualtron, Xiaomi, Segway and other brands use closed protocols and can't connect.";
+if(NATIVE)$("installBox").style.display="none";
+
+/* ---------- wake lock ---------- */
+let wake=null;async function requestWake(){if(!G.wake||!("wakeLock" in navigator)||document.hidden)return;try{wake=await navigator.wakeLock.request("screen")}catch(e){}}
+document.addEventListener("visibilitychange",()=>{if(document.hidden)store.set("odo",odo);else requestWake()});
+document.addEventListener("pointerdown",requestWake,{once:true});
+
+/* ---------- controls ---------- */
+function hap(st){try{if(NATIVE&&Cap.Plugins.Haptics)Cap.Plugins.Haptics.impact({style:st||"MEDIUM"});else if(navigator.vibrate)navigator.vibrate(12)}catch(e){}}
+function setGear(g){hap();gear=Math.max(0,Math.min(2,g));store.set("gear",gear);if(cruise)cruise=Math.min(cruise,cfg.top*G.gearPct[gear]/100);sendLimits();render()}
+function setDual(d){if(cfg.motors===1)return;hap();dual=d;store.set("dual",dual);sendLimits();render()}
+function setLight(l){light=l;render()}
+function toggleOdo(){odoMode=odoMode==="odo"?"trip":"odo";render()}
+document.querySelectorAll("#gearSegs button").forEach(b=>b.onclick=()=>setGear(+b.dataset.g));
+document.querySelectorAll("#motSegs button").forEach(b=>b.onclick=()=>setDual(b.dataset.m==="2"));
+const th=$("throttle");const down=e=>{e.preventDefault();hap("LIGHT");throttle=true;th.classList.add("on");th.textContent="Riding…"};
+const up=()=>{throttle=false;th.classList.remove("on");th.textContent="Hold to ride"};
+th.addEventListener("pointerdown",down);["pointerup","pointercancel","pointerleave"].forEach(v=>th.addEventListener(v,up));
+th.addEventListener("keydown",e=>{if(e.key===" "||e.key==="Enter")down(e)});th.addEventListener("keyup",up);th.addEventListener("contextmenu",e=>e.preventDefault());
+$("lightBtn").onclick=()=>setLight(!light);
+$("cruiseBtn").onclick=()=>{if(cruise)cruise=0;else if(S.speed>8)cruise=S.speed;else toast("Get above 8 km/h to set cruise");render()};
+const bb=$("brakeBtn");bb.addEventListener("pointerdown",e=>{e.preventDefault();brake=true;bb.setAttribute("aria-pressed",true)});
+["pointerup","pointercancel","pointerleave"].forEach(v=>bb.addEventListener(v,()=>{brake=false;bb.setAttribute("aria-pressed",false)}));
+const TITLES={dash:"G2 Dash",stats:"Rides",set:"Settings",account:"Account"};let curView="dash";
+const stacks=(()=>{try{const x=JSON.parse(sessionStorage.getItem("g2dash:stacks")||"null");if(x&&x.dash)return x}catch(e){}return{dash:[],stats:[],set:[]}})();
+const screenOf=t=>{const st=stacks[t]||[];return st.length?st[st.length-1]:t};
+function appbar(){const scr=screenOf(curView);$("abTitle").textContent=TITLES[scr];$("abBack").hidden=scr===curView;$("abLogo").hidden=scr!==curView;$("abSub").textContent=cfg.brand+" "+cfg.name+(cfg.motors===2?(dualOn()?" · dual":" · single"):"");
+  $("abDot").className=live?"live":"";$("abTxt").textContent=live?(conn&&conn.kind==="usb"?"USB":conn&&conn.kind==="gps"?"GPS":"Live"):"Beta"}
+const ORDER=["dash","stats","set"],scrollPos=(()=>{try{return JSON.parse(sessionStorage.getItem("g2dash:scroll")||"{}")}catch(e){return{}}})(),scroller=document.getElementById("scroller");
+function swapView(v){const scr=screenOf(v);try{sessionStorage.setItem("g2dash:tab",v);sessionStorage.setItem("g2dash:scroll",JSON.stringify(scrollPos));sessionStorage.setItem("g2dash:stacks",JSON.stringify(stacks))}catch(e){}document.querySelectorAll(".view").forEach(x=>x.classList.toggle("active",x.id==="v-"+scr));
+  document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));
+  scroller.scrollTop=scrollPos[scr]||0;appbar();document.querySelectorAll(".tabs button").forEach(b=>b.tabIndex=b.dataset.v===v?0:-1);if(v==="dash")drawGraph()}
+let tabPushed=false,sheetOpen=null,pendingNav=null;
+function animSwap(v,dir){const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(document.startViewTransition&&!reduce){document.startViewTransition(()=>swapView(v))}
+  else{swapView(v);if(!reduce){const el=$("v-"+screenOf(v));el.classList.remove("in-r","in-l");void el.offsetWidth;el.classList.add(dir)}}}
+function openSub(name){const t=curView;if(screenOf(t)===name)return;scrollPos[screenOf(t)]=scroller.scrollTop;stacks[t].push(name);scrollPos[name]=0;
+  try{history.pushState({v:t,sub:name},"","#"+t+"/"+name)}catch(e){}animSwap(t,"in-r")}
+function closeSub(){if(stacks[curView].length)history.back()}
+function show(v,opt={}){if(!ORDER.includes(v))v="dash";const from=curView;
+  if(v===from&&!opt.force){if(stacks[v].length){history.back();return}scroller.scrollTo({top:0,behavior:"smooth"});return}
+  if(!opt.fromPop&&!opt.unwound&&stacks[from].length){pendingNav=()=>show(v,{unwound:true});history.go(-stacks[from].length);return}
+  scrollPos[screenOf(from)]=scroller.scrollTop;curView=v;
+  if(!opt.fromPop){try{if(v==="dash"){if(history.state&&history.state.v&&history.state.v!=="dash"&&tabPushed){tabPushed=false;curView=from;history.back();return}history.replaceState({v:"dash"},"","#dash")}
+    else{if(from==="dash"||!tabPushed){history.pushState({v},"","#"+v);tabPushed=true}else history.replaceState({v},"","#"+v);
+      stacks[v].forEach(sub=>history.pushState({v,sub},"","#"+v+"/"+sub))}}catch(e){}}
+  animSwap(v,ORDER.indexOf(v)>=ORDER.indexOf(from)?"in-r":"in-l")}
+window.addEventListener("popstate",e=>{if(sheetOpen){const f=sheetOpen;sheetOpen=null;f(false,true);return}
+  if(!$("onb").hidden){$("onb").hidden=true;store.set("onboarded",true)}
+  if(pendingNav){const f=pendingNav;pendingNav=null;f();return}
+  const st=e.state||{},v=st.v||location.hash.slice(1).split("/")[0]||"dash";
+  if(v===curView){const want=st.sub?1:0,have=stacks[v].length;
+    if(have>want){scrollPos[screenOf(v)]=scroller.scrollTop;stacks[v].pop();animSwap(v,"in-l")}else if(want>have&&st.sub){stacks[v].push(st.sub);animSwap(v,"in-r")}return}
+  if(v==="dash")tabPushed=false;show(v,{fromPop:true})});
+function askConfirm(title,text,ok){return new Promise(res=>{const bg=$("sheet"),last=document.activeElement;$("shTitle").textContent=title;$("shText").textContent=text;$("shOk").textContent=ok;
+  bg.hidden=false;setTimeout(()=>$("shCancel").focus(),30);
+  const done=(val,fromPop)=>{bg.hidden=true;sheetOpen=null;document.removeEventListener("keydown",key);if(last&&last.focus)last.focus();if(!fromPop)history.back();res(val)};
+  const key=e=>{if(e.key==="Escape")done(false);if(e.key==="Tab"){const a=$("shOk"),b=$("shCancel");if(e.shiftKey&&document.activeElement===a){e.preventDefault();b.focus()}else if(!e.shiftKey&&document.activeElement===b){e.preventDefault();a.focus()}}};
+  document.addEventListener("keydown",key);sheetOpen=done;try{history.pushState(Object.assign({},history.state,{sheet:1}),"")}catch(e){}
+  $("shOk").onclick=()=>done(true);$("shCancel").onclick=()=>done(false);bg.onclick=e=>{if(e.target===bg)done(false)}})}
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>show(b.dataset.v));
+
+/* ---------- settings ---------- */
+const catOf=id=>BRANDS[id].cat||"scooter";let cat=catOf(modelKey.split(":")[0]);if(cat==="both")cat=G.cat||"scooter";
+Object.entries(BRANDS).forEach(([id,b])=>{const e=document.createElement("button");e.textContent=b.name;e.dataset.b=id;e.onclick=()=>{brandView=id;$("mSearch").value="";renderModels()};$("brands").appendChild(e)});
+document.querySelectorAll("#catSeg button").forEach(b=>b.onclick=()=>{cat=b.dataset.c;G.cat=cat;saveG();$("mSearch").value="";
+  if(catOf(brandView)!==cat&&catOf(brandView)!=="both")brandView=Object.keys(BRANDS).find(k=>catOf(k)===cat);renderModels();$("brands").scrollLeft=0});
+$("mSearch").oninput=()=>renderModels();
+if($("mvFile"))$("mvFile").onchange=async e=>{const f=e.target.files&&e.target.files[0];e.target.value="";if(!f)return;
+  try{const url=URL.createObjectURL(f),im=new Image();await new Promise((r,j)=>{im.onload=r;im.onerror=j;im.src=url});
+    const MAX=520,sc=Math.min(1,MAX/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement("canvas");c.width=Math.round(im.naturalWidth*sc);c.height=Math.round(im.naturalHeight*sc);
+    c.getContext("2d").drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(url);
+    const data=c.toDataURL("image/jpeg",.82);try{localStorage.setItem("g2dash:photo:"+modelKey,JSON.stringify(data))}catch(err){toast("Not enough space for this photo");return}
+    hap();renderMyVeh();renderModels();toast("Photo saved")}catch(err){toast("Couldn't open that picture")}};
+if($("mvDel"))$("mvDel").onclick=()=>{try{localStorage.removeItem("g2dash:photo:"+modelKey)}catch(e){}renderMyVeh();renderModels();toast("Photo removed")};
+(function brandScroll(){const br=$("brands"),wrap=$("bwrap");
+  const upd=()=>{const max=br.scrollWidth-br.clientWidth;wrap.classList.toggle("at-start",br.scrollLeft<=2);wrap.classList.toggle("at-end",br.scrollLeft>=max-2||max<=0)};
+  br.addEventListener("scroll",upd,{passive:true});window.addEventListener("resize",upd);new ResizeObserver(upd).observe(br);
+  const step=d=>br.scrollBy({left:d*br.clientWidth*.7,behavior:"smooth"});
+  $("bL").onclick=()=>step(-1);$("bR").onclick=()=>step(1);
+  br.addEventListener("wheel",e=>{if(Math.abs(e.deltaY)>Math.abs(e.deltaX)&&br.scrollWidth>br.clientWidth){e.preventDefault();br.scrollLeft+=e.deltaY}},{passive:false});
+  let down=null,moved=false;
+  br.addEventListener("pointerdown",e=>{if(e.pointerType!=="mouse")return;down={x:e.clientX,l:br.scrollLeft};moved=false});
+  window.addEventListener("pointermove",e=>{if(!down)return;const dx=e.clientX-down.x;if(Math.abs(dx)>4){moved=true;br.classList.add("drag")}if(moved)br.scrollLeft=down.l-dx});
+  window.addEventListener("pointerup",()=>{if(!down)return;down=null;setTimeout(()=>{br.classList.remove("drag")},0)});
+  br.addEventListener("click",e=>{if(moved){e.stopPropagation();e.preventDefault();moved=false}},true);
+  window.brandScrollUpd=upd;setTimeout(upd,50)})();
+const SIL={
+ commuter:'<circle cx="12" cy="31" r="5"/><circle cx="52" cy="31" r="5"/><path d="M17 31h24l7-14"/><path d="M52 31 46 6"/><path d="M41 6h9"/>',
+ offroad:'<circle cx="12" cy="29" r="7.5" stroke-width="3.4"/><circle cx="52" cy="29" r="7.5" stroke-width="3.4"/><path d="M19.5 28h21l6-12"/><path d="M52 29 44.5 5"/><path d="M38 5h12"/><path d="M12 21.5l7-4.5"/><path d="M48.5 17.5l5 2"/>',
+ seated:'<circle cx="12" cy="31" r="5.5"/><circle cx="52" cy="31" r="5.5"/><path d="M17.5 31h23l7-14"/><path d="M52 31 46 6"/><path d="M41 6h9"/><path d="M21 31V19"/><path d="M14 18.5h13"/>',
+ mtb:'<circle cx="14" cy="29" r="9" stroke-width="3"/><circle cx="50" cy="29" r="9" stroke-width="3"/><path d="M14 29 25 14h15"/><path d="M40 14 32 29H14"/><path d="M40 14 32 29" stroke-width="5"/><path d="M25 14l-2-4h6"/><path d="M50 29 43 9h5"/>',
+ city:'<circle cx="14" cy="29" r="9"/><circle cx="50" cy="29" r="9"/><path d="M14 29h17l9-17"/><path d="M14 29 22 19q4-6 18-7"/><path d="M50 29 42 7h5"/><path d="M20 16h7"/><path d="M5 20h17"/><path d="M5 20v-3"/>',
+ cargo:'<circle cx="12" cy="32" r="6"/><circle cx="52" cy="30" r="8"/><path d="M12 32h24l9-20"/><path d="M52 30 45 8h5"/><rect x="5" y="15" width="21" height="11" rx="2"/><path d="M30 21h-2v-5"/>',
+ dirt:'<circle cx="14" cy="29" r="8.5" stroke-width="3.2"/><circle cx="51" cy="29" r="8.5" stroke-width="3.2"/><path d="M14 29l9-11h16l12 11"/><path d="M19 15h18"/><path d="M42 13l14 5"/><path d="M39 18l4-11h5"/><path d="M26 18v8h10l3-8"/>'};
+function silType(bid,id,m){const n=(m.name+" "+(m.sys||"")).toLowerCase(),bike=catOf(bid)==="bike"||id==="bike";
+  if(bike){if(bid==="yozma")return"dirt";if(/cargo|wagon|fetch/.test(n))return"cargo";if(/city|tour|gran|style|trekking|vado|como|allant|verve|kathmandu|nuroad|espresso|kemen|pathlite|explore|axis|crosscore|urban|wabash|active|e6100|ep-2|engine|d11|t1|x$|cruiser|zebra|e26/.test(n))return"city";return"mtb"}
+  if(/c1 pro|m4|cruiser|seat/.test(n)||id==="m4max"||id==="m4pro")return"seated";
+  if(m.motors===2&&m.top>=55||m.top>=70||parseInt(m.volt)>=60)return"offroad";return"commuter"}
+const silSvg=t=>`<svg viewBox="0 0 64 40" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SIL[t]}</svg>`;
+function modelCard(bid,id,m0,showBrand){const key=bid+":"+id,m=Object.assign({},m0,store.get("cfg:"+key,{}));
+  const e=document.createElement("button");e.className="mcard";e.setAttribute("aria-pressed",key===modelKey);
+  const isBike=catOf(bid)==="bike"||id==="bike",wh=Math.round(parseInt(m.volt)*m.ah);
+  const th="";
+  e.innerHTML=th+(isBike?`<div><b>${showBrand?BRANDS[bid].name+" ":""}${m.name}</b><span>${m.sys||"E-bike"} · ${wh} Wh · ${m.wheel}"</span></div><em>${m.top} km/h</em>`
+    :`<div><b>${showBrand?BRANDS[bid].name+" ":""}${m.name}</b><span>${m.volt} ${m.ah}Ah · ${m.motors===2?"dual "+m.watt+"W ×2":m.watt+"W"} · ${m.wheel}"</span></div><em>${m.top} km/h</em>`);
+  e.onclick=()=>{modelKey=key;brandView=bid;store.set("modelKey",key);loadCfg();if(!live)S.soc=100;dual=cfg.motors===2;applyAll();toast(BRANDS[bid].name+" "+m.name+" selected");if(isBike&&!live)toast(BRANDS[bid].name+" "+m.name+" selected. Use GPS for live speed.")};const row=document.createElement("div");row.className="mrow";row.appendChild(e);
+  if(id!=="custom"&&id!=="bike"){const full=BRANDS[bid].name+" "+m.name,a=document.createElement("a");a.className="mphoto";a.target="_blank";a.rel="noopener";
+    a.href="https://www.google.com/search?tbm=isch&q="+encodeURIComponent(full+(isBike?" e-bike":" electric scooter"));a.setAttribute("aria-label","Photos of "+full);a.title="See photos";
+    a.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="3"/><circle cx="9" cy="10.5" r="1.8"/><path d="M21 16l-5-5-9 9"/></svg>';row.appendChild(a)}
+  else{row.style.gridTemplateColumns="1fr"}
+  return row}
+function renderModels(){const q=$("mSearch").value.trim().toLowerCase(),w=$("models");w.innerHTML="";
+  document.querySelectorAll("#catSeg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.c===cat));
+  document.querySelectorAll("#brands button").forEach(b=>{const c=catOf(b.dataset.b);b.hidden=!(c===cat||c==="both")});
+  document.querySelectorAll("#brands button").forEach(b=>b.setAttribute("aria-pressed",!q&&b.dataset.b===brandView));
+  if(q){let n=0;for(const[bid,b]of Object.entries(BRANDS)){if(catOf(bid)!==cat&&catOf(bid)!=="both")continue;for(const[id,m]of Object.entries(b.models))
+      if((b.name+" "+m.name).toLowerCase().includes(q)&&n++<40)w.appendChild(modelCard(bid,id,m,true));}
+    if(!n)w.innerHTML='<p class="note">No match. Pick <b>Custom</b> and enter your specs.</p>';return}
+  Object.entries(BRANDS[brandView].models).forEach(([id,m])=>{if(brandView==="custom"&&((cat==="bike")!==(id==="bike")))return;w.appendChild(modelCard(brandView,id,m,false))});
+  const sel=document.querySelector(`#brands [data-b="${brandView}"]`),br=$("brands");
+  if(sel){const l=sel.offsetLeft-br.offsetLeft,r=l+sel.offsetWidth;if(l<br.scrollLeft)br.scrollLeft=l-40;else if(r>br.scrollLeft+br.clientWidth)br.scrollLeft=r-br.clientWidth+40}
+  if(window.brandScrollUpd)setTimeout(window.brandScrollUpd,30)}
+function saveCfg(k,v){cfg[k]=v;const o=store.get("cfg:"+modelKey,{});o[k]=v;store.set("cfg:"+modelKey,o);applyAll()}
+[["Watt","watt",parseInt],["Peak","peak",parseInt],["Top","top",parseFloat],["Poles","poles",parseInt],["Cells","cells",parseInt],["Ah","ah",parseFloat],["Wheel","wheel",parseFloat]].forEach(([id,k,p])=>
+  $("f"+id).onchange=e=>{const v=p(e.target.value);if(v>0)saveCfg(k,v);else applyAll()});
+document.querySelectorAll("#motCount button").forEach(b=>b.onclick=()=>{saveCfg("motors",+b.dataset.n)});
+$("fCan").onchange=e=>{const v=parseInt(e.target.value);if(v>=0&&v<=254){G.canId=v;saveG()}applyAll()};
+$("fAlert").onchange=e=>{const v=parseInt(e.target.value);G.alert=v>0?v:0;saveG();applyAll()};
+for(let i=0;i<3;i++){$("gs"+i).onchange=e=>{const v=parseInt(e.target.value);if(v>=10&&v<=100){G.gearPct[i]=v;saveG();sendLimits()}applyAll()};
+  $("gp"+i).onchange=e=>{const v=parseInt(e.target.value);if(v>=10&&v<=100){G.gearPow[i]=v;saveG();sendLimits()}applyAll()}}
+$("limStoreSw").onclick=()=>{G.limitStore=!G.limitStore;saveG();applyAll()};
+$("ctrlSw").onclick=()=>{G.ctrlGears=!G.ctrlGears;saveG();applyAll();if(G.ctrlGears)sendLimits()};
+$("wakeSw").onclick=()=>{G.wake=!G.wake;saveG();applyAll();if(G.wake)requestWake();else if(wake){wake.release();wake=null}};
+document.querySelectorAll("#unitSeg button").forEach(b=>b.onclick=()=>{G.units=b.dataset.u;saveG();applyAll()});
+document.querySelectorAll(".scard").forEach(b=>b.onclick=()=>{G.style=b.dataset.s;saveG();buildStyle();toast(b.textContent+" style");show("dash")});
+$("btBtn").onclick=()=>connect("bt");$("gpsBtn").onclick=()=>connect("gps");
+document.querySelectorAll("#protoSeg button").forEach(b=>b.onclick=()=>{if(live){toast("Disconnect first");return}G.proto=b.dataset.p;saveG();applyAll()});
+$("scanBtn").onclick=async()=>{if(scan){try{await scan.close()}catch(e){}scanState(false);return}
+  if(live){toast("Disconnect the dashboard first");return}
+  if(!HAS_BT){toast("Bluetooth isn't available here. Use Bluefy or the app.");return}
+  try{scan=NBLE?await scanNative():await scanWeb();scanState(true)}catch(e){const m=String(e&&e.message||e);if(!/cancel|NotFound|No device selected|chooser/i.test(m)){slog("Error: "+m);toast("Scan failed: "+m)}}};
+$("scanCopy").onclick=async()=>{if(!scanLines.length){toast("The log is empty");return}try{await navigator.clipboard.writeText(scanLines.join("\n"));toast("Log copied. Paste it in the chat with Claude.")}catch(e){toast("Select the log text and copy it")}};
+$("scanClear").onclick=()=>{scanLines=[];$("scanLog").textContent=""};$("usbBtn").onclick=()=>connect("usb");
+$("fColor").value=G.color||"auto";$("fColor").onchange=e=>{G.color=e.target.value;saveG();applyColor();render()};
+$("resetModel").onclick=()=>{store.set("cfg:"+modelKey,{});loadCfg();applyAll();toast("Defaults restored")};
+/* ================= ACCOUNT (Supabase) ================= */
+let SB=null,acUser=null;
+const SKIP=k=>k==="g2dash:lastSync"||k==="g2dash:onboarded"||k.startsWith("g2dash:photo:");
+function localSnapshot(){const o={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith("g2dash:")&&!SKIP(k))o[k]=localStorage.getItem(k)}return o}
+function acRender(){const ok=!!SB;$("acCfg").hidden=ok;$("acOut").hidden=!!acUser;$("acIn").hidden=!acUser;
+  ["acSignIn","acSignUp","acForgot"].forEach(id=>$(id).disabled=!ok);
+  const ini=acUser?(acUser.email||"?")[0].toUpperCase():"?";$("acAvSmall").textContent=ini;$("acAv").textContent=ini;
+  $("acState").textContent=acUser?acUser.email:(ok?"Sign in to sync rides and settings":"Optional · not set up yet");
+  $("delAccSet").hidden=!acUser;
+  if(acUser){$("acMail").textContent=acUser.email;const t=store.get("lastSync",0);$("acSync").textContent=t?"Last synced "+new Date(t).toLocaleString(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"Not synced yet"}}
+function acBusy(id,on,label){const b=$(id);if(on){b.dataset.t=b.textContent;b.classList.add("busy");b.textContent=label}else{b.classList.remove("busy");if(b.dataset.t)b.textContent=b.dataset.t}}
+async function syncNow(first){if(!SB||!acUser||window.__g2deleting)return;
+  try{const{data:row,error}=await SB.from("user_data").select("data,updated_at").eq("user_id",acUser.id).maybeSingle();if(error)throw error;
+    let local=localSnapshot();
+    if(first&&row&&row.data){const remote=row.data,merged=Object.assign({},local,remote);
+      try{const lh=JSON.parse(local["g2dash:history"]||"[]"),rh=JSON.parse(remote["g2dash:history"]||"[]");
+        const all=[...(Array.isArray(lh)?lh:[]),...(Array.isArray(rh)?rh:[])],seen=new Set(),h=all.filter(r=>{if(seen.has(r.d))return false;seen.add(r.d);return true}).sort((a,b)=>b.d-a.d).slice(0,30);
+        merged["g2dash:history"]=JSON.stringify(h)}catch(e){}
+      const lo=parseFloat(JSON.parse(local["g2dash:odo"]||"0")),ro=parseFloat(JSON.parse(remote["g2dash:odo"]||"0"));merged["g2dash:odo"]=JSON.stringify(Math.max(lo||0,ro||0));
+      const changed=JSON.stringify(merged)!==JSON.stringify(local);
+      Object.entries(merged).forEach(([k,v])=>{try{localStorage.setItem(k,v)}catch(e){}});local=merged;
+      await SB.from("user_data").upsert({user_id:acUser.id,data:local,updated_at:new Date().toISOString()});store.set("lastSync",Date.now());window.__g2dirty=false;
+      if(changed){toast("Synced. Loading your data…");setTimeout(()=>location.reload(),700);return}}
+    else{const{error:e2}=await SB.from("user_data").upsert({user_id:acUser.id,data:local,updated_at:new Date().toISOString()});if(e2)throw e2;store.set("lastSync",Date.now());window.__g2dirty=false}
+    acRender()}catch(e){if(!first)toast("Sync failed: "+(e.message||e))}}
+async function acInit(){const C=window.G2_CONFIG||{};
+  if(C.supabaseUrl&&C.supabaseAnonKey&&window.supabase){try{SB=window.supabase.createClient(C.supabaseUrl,C.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}})}catch(e){SB=null}}
+  if(SB){const{data}=await SB.auth.getSession();acUser=data.session?data.session.user:null;
+    SB.auth.onAuthStateChange((ev,sess)=>{const was=acUser;acUser=sess?sess.user:null;acRender();
+      if(ev==="SIGNED_IN"&&!was){toast("Signed in");syncNow(true)}
+      if(ev==="PASSWORD_RECOVERY"){show("set");openSub("account");$("acNewPwBox").hidden=false;$("acOut").hidden=true}});
+    if(acUser)syncNow(false)}
+  acRender()}
+const acCreds=()=>{const email=$("acEmail").value.trim(),password=$("acPass").value;
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){toast("Enter a valid email");$("acEmail").focus();return null}
+  if(password.length<8){toast("Password needs at least 8 characters");$("acPass").focus();return null}return{email,password}};
+$("openAccount").onclick=()=>openSub("account");
+$("acSignIn").onclick=async()=>{const c=acCreds();if(!c||!SB)return;acBusy("acSignIn",true,"Signing in…");
+  const{error}=await SB.auth.signInWithPassword(c);acBusy("acSignIn",false);if(error)toast(error.message);else{$("acPass").value=""}};
+$("acSignUp").onclick=async()=>{const c=acCreds();if(!c||!SB)return;acBusy("acSignUp",true,"Creating…");
+  const{data,error}=await SB.auth.signUp({...c,options:{emailRedirectTo:location.origin+location.pathname}});acBusy("acSignUp",false);
+  if(error)toast(error.message);else if(!data.session)toast("Check your email to confirm your account");};
+$("acForgot").onclick=async()=>{const email=$("acEmail").value.trim();if(!SB)return;if(!email){toast("Enter your email first");$("acEmail").focus();return}
+  const{error}=await SB.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});toast(error?error.message:"Password reset email sent")};
+$("acSetPw").onclick=async()=>{const pw=$("acNewPw").value;if(pw.length<8){toast("Password needs at least 8 characters");return}
+  const{error}=await SB.auth.updateUser({password:pw});toast(error?error.message:"Password changed");if(!error){$("acNewPwBox").hidden=true;acRender()}};
+$("acSyncBtn").onclick=async()=>{acBusy("acSyncBtn",true,"Syncing…");await syncNow(false);acBusy("acSyncBtn",false);if(acUser)toast("Synced")};
+$("acSignOut").onclick=async()=>{if(!await askConfirm("Sign out?","Your data stays on this device. Sign in again to sync.","Sign out"))return;
+  if(window.__g2dirty)await syncNow(false);await SB.auth.signOut();acUser=null;acRender();toast("Signed out")};
+async function deleteAccount(){if(!acUser||!SB)return;
+  if(!await askConfirm("Delete your account?","Your account, email and all synced rides and settings are deleted from our server, and the data on this device is removed. This can't be undone.","Delete account"))return;
+  acBusy("acDelete",true,"Deleting…");const{error}=await SB.rpc("delete_user");
+  if(error){acBusy("acDelete",false);toast("Couldn't delete: "+error.message);return}
+  acUser=null;window.__g2deleting=true;window.__g2dirty=false;try{await SB.auth.signOut()}catch(e){}
+  try{Object.keys(localStorage).filter(k=>k.startsWith("g2dash:")||k.startsWith("sb-")).forEach(k=>localStorage.removeItem(k))}catch(e){}
+  try{sessionStorage.setItem("g2dash:wiped","acc")}catch(e){}location.replace(location.pathname)}
+$("acDelete").onclick=deleteAccount;$("delAccSet").onclick=()=>{openSub("account");setTimeout(deleteAccount,350)};
+setInterval(()=>{if(acUser&&window.__g2dirty)syncNow(false)},30000);
+document.addEventListener("visibilitychange",()=>{if(document.hidden&&acUser&&window.__g2dirty)syncNow(false)});
+window.addEventListener("load",()=>acInit());
+$("wipeAll").onclick=async()=>{if(!await askConfirm("Delete all data on this device?","This removes your settings, rides and odometer from this device. Your account (if you have one) is not deleted.","Delete data"))return;
+  const b=$("wipeAll");b.classList.add("busy");b.textContent="Deleting…";
+  try{if(live&&conn)await conn.close()}catch(e){}
+  try{Object.keys(localStorage).filter(k=>k.startsWith("g2dash:")).forEach(k=>localStorage.removeItem(k))}catch(e){}
+  try{if(window.caches)for(const k of await caches.keys())await caches.delete(k)}catch(e){}
+  try{if(navigator.serviceWorker)for(const r of await navigator.serviceWorker.getRegistrations())await r.unregister()}catch(e){}
+  try{sessionStorage.setItem("g2dash:wiped","1")}catch(e){}location.replace(location.pathname)};
+(function pullToRefresh(){const ptr=$("ptr");let y0=null,dy=0,busy=false,armed=false;
+  const view=()=>$("v-"+curView),setP=(d,anim)=>{const p=Math.min(1,d/80),t=anim?"transform .25s cubic-bezier(.2,.8,.2,1),opacity .2s":"none";
+    ptr.style.transition=t;ptr.style.opacity=p;ptr.style.transform=`translateY(${Math.min(d,90)-40}px) rotate(${d*3}deg) scale(${.6+.4*p})`;
+    const v=view();v.style.transition=t;v.style.transform=d>0?`translateY(${Math.min(d,90)*.6}px)`:""};
+  const blocked=t=>t.closest("#throttle,#brakeBtn,.lb,input,select,#scanLog,.brands,canvas");
+  scroller.addEventListener("touchstart",e=>{if(busy||sheetOpen||!$("onb").hidden||scroller.scrollTop>0||e.touches.length>1||blocked(e.target))return;y0=e.touches[0].clientY;dy=0;armed=false},{passive:true});
+  scroller.addEventListener("touchmove",e=>{if(y0===null)return;const raw=e.touches[0].clientY-y0;if(raw<=0){setP(0);return}
+    dy=Math.pow(raw,.85)*.6;setP(dy);if(dy>70&&!armed){armed=true;hap("LIGHT")}if(dy<=70)armed=false},{passive:true});
+  const end=()=>{if(y0===null)return;y0=null;
+    if(dy>70){busy=true;ptr.classList.add("spin");setP(80,true);$("srLive").textContent="Refreshing";
+      setTimeout(()=>{refreshView();ptr.classList.remove("spin");setP(0,true);$("srLive").textContent="Refreshed";setTimeout(()=>{busy=false},260)},650)}
+    else setP(0,true);dy=0};
+  scroller.addEventListener("touchend",end);scroller.addEventListener("touchcancel",end);
+  window.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="r"&&!e.shiftKey){e.preventDefault();refreshView()}});
+})();
+function refreshView(){if(curView==="stats")renderHistory();if(curView==="set"){renderModels();connBtns()}if(curView==="dash"){drawGraph();requestWake()}
+  applyAll();appbar();toast("Updated")}
+document.addEventListener("contextmenu",e=>{if(!e.target.closest("input,textarea,#scanLog"))e.preventDefault()});
+document.addEventListener("dblclick",e=>e.preventDefault(),{passive:false});
+$("resetOdo").onclick=async()=>{if(await askConfirm("Reset the odometer?","The total distance goes back to 0. Your saved rides stay.","Reset odometer")){odo=0;store.set("odo",0);render();toast("Odometer reset")}};
+function saveRide(){if(S.trip<0.1)return false;const h=store.get("history",[]);h.unshift({d:Date.now(),m:cfg.brand+" "+cfg.name,dist:S.trip,time:S.time,max:S.max,wh:S.wh});store.set("history",h.slice(0,30));renderHistory();return true}
+function renderHistory(){const h=store.get("history",[]),w=$("hist"),k=K();
+  if(!h.length){w.innerHTML='<div class="empty">'+(cat==="bike"?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="16" r="3.5"/><circle cx="18.5" cy="16" r="3.5"/><path d="M5.5 16 9.3 9h6.4l2.8 7"/><path d="M12.6 16 9.3 9"/><path d="M7.9 6.5h3"/><path d="M14.4 6.5h2.3l-1 2.5"/></svg>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="18" r="2.6"/><circle cx="19" cy="18" r="2.6"/><path d="M7.6 18h7.2l2.9-6.4"/><path d="M19 18 15.9 4"/><path d="M13.2 4h3.3"/></svg>')+'<b>No rides yet</b>Rides are saved when you start a new ride or disconnect.</div>';$("clearHist").style.display="none";return}
+  $("clearHist").style.display="block";
+  w.innerHTML=h.map(r=>{const d=new Date(r.d),t=Math.round(r.time/60);return`<div class="hrow"><div><b>${d.toLocaleDateString(undefined,{day:"numeric",month:"short"})} · ${d.getHours()}:${String(d.getMinutes()).padStart(2,"0")}</b><span>${r.m} · ${t} min · top ${Math.round(r.max*k)} ${sU()}</span></div><div class="r"><b>${(r.dist*k).toFixed(1)} ${dU()}</b><span>${Math.round(r.wh)} Wh</span></div></div>`}).join("")}
+$("clearHist").onclick=async()=>{if(await askConfirm("Delete all saved rides?","Your ride history is removed from this device.","Delete rides")){store.set("history",[]);renderHistory();toast("Ride history deleted")}};
+$("resetTrip").onclick=()=>{const saved=saveRide();Object.assign(S,{trip:0,wh:0,time:0,max:0,peakP:0});tach0=null;render();toast(saved?"Ride saved. New ride started.":"New ride started")};
+const ts=$("fTheme");ts.value=G.theme;
+function applyTheme(){if(G.theme==="auto")document.documentElement.removeAttribute("data-theme");else document.documentElement.setAttribute("data-theme",G.theme);drawGraph()}
+ts.onchange=()=>{G.theme=ts.value;saveG();applyTheme()};applyTheme();
+
+if(!NATIVE&&(/claude/.test(location.hostname)||!location.hostname))try{const c=document.createElement("canvas");c.width=c.height=180;const g=c.getContext("2d");g.fillStyle="#05080A";g.fillRect(0,0,180,180);
+  for(let i=0;i<18;i++){const a0=(200+i/18*140)*Math.PI/180,a1=(200+(i+.7)/18*140)*Math.PI/180;g.fillStyle=i<12?"#56E36F":i<15?"#FFC53D":"#1a2a22";g.beginPath();g.arc(90,112,70,a0,a1);g.arc(90,112,56,a1,a0,true);g.fill()}
+  g.fillStyle="#EEF6F7";g.font="700 46px 'Barlow Semi Condensed',sans-serif";g.textAlign="center";g.fillText("G2",90,124);
+  const l=document.createElement("link");l.rel="apple-touch-icon";l.href=c.toDataURL("image/png");document.head.appendChild(l)}catch(e){}
+
+if(cfg.motors===1)dual=false;
+(function iosBanner(){if(!IS_IOS||NATIVE||store.get("iosBanDone",false))return;
+  const standalone=navigator.standalone||matchMedia("(display-mode: standalone)").matches,bluefy=!!navigator.bluetooth;
+  const share='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
+  let html;
+  if(bluefy)html="<b>Bluefy detected, so Bluetooth is ready.</b> Go to Settings and tap Bluetooth to connect your VESC. Keep using Bluefy for live data.";
+  else if(standalone)html="<b>Installed!</b> Test mode works here. For live Bluetooth data, open this same link in the free <b>Bluefy</b> app, because Apple blocks Bluetooth in home-screen web apps.<br><button class='cp' id='cpLink'>Copy link for Bluefy</button>";
+  else html="<b>Install on your iPhone:</b> tap "+share+" <b>Share</b>, then <b>Add to Home Screen</b>. For live Bluetooth data, open this link in the free <b>Bluefy</b> app instead.<br><button class='cp' id='cpLink'>Copy link for Bluefy</button>";
+  $("iosTxt").innerHTML=html;$("iosBan").classList.add("show");
+  $("iosX").onclick=()=>{$("iosBan").classList.remove("show");store.set("iosBanDone",true)};
+  const cp=$("cpLink");if(cp)cp.onclick=async()=>{try{await navigator.clipboard.writeText(location.href);toast("Link copied. Paste it in Bluefy.")}catch(e){toast("Copy the address from Safari's address bar")}};
+})();
+(function groupFields(){document.querySelectorAll("#v-set .field").forEach(f=>{if(f.parentElement.classList.contains("group"))return;
+  const g=document.createElement("div");g.className="group";f.before(g);let n=f;while(n&&n.classList&&n.classList.contains("field")){const nx=n.nextElementSibling;g.appendChild(n);n=nx}})})();
+$("abPill").onclick=()=>{show("set");setTimeout(()=>{const c=document.querySelector(".conn");if(c)c.scrollIntoView({block:"center",behavior:"smooth"})},60)};
+if(!store.get("onboarded",false)&&!NATIVE_SKIP_ONB()){$("onb").hidden=false}
+function NATIVE_SKIP_ONB(){return false}
+const closeOnb=()=>{$("onb").hidden=true;store.set("onboarded",true)};
+$("onbDemo").onclick=closeOnb;$("onbAcc").onclick=()=>{closeOnb();show("set");setTimeout(()=>openSub("account"),60)};$("onbPick").onclick=()=>{closeOnb();show("set");setTimeout(()=>$("mSearch").focus(),100)};
+if("serviceWorker" in navigator&&location.protocol==="https:"&&!/claude/.test(location.hostname))navigator.serviceWorker.register("sw.js").catch(()=>{});
+setInterval(appbar,1000);
+try{const w=sessionStorage.getItem("g2dash:wiped");if(w){sessionStorage.removeItem("g2dash:wiped");setTimeout(()=>toast(w==="acc"?"Your account and data were deleted":"All your data was deleted"),400)}}catch(e){}
+let lastSr="";setInterval(()=>{const D=data(),t=`${Math.round(D.v)} ${sU()}, battery ${Math.round(S.soc)} percent, gear ${gear+1}`;$("disp").setAttribute("aria-label","Scooter display: "+t);
+  if(live&&t!==lastSr){lastSr=t}},2000);
+document.querySelectorAll("#v-set .field").forEach(f=>{const l=f.querySelector(":scope>label");if(!l)return;const name=l.childNodes[0].textContent.trim();
+  f.querySelectorAll("input,select").forEach((el,i,all)=>{if(!el.getAttribute("aria-label"))el.setAttribute("aria-label",all.length>1?`${name} ${i+1}`:name)});
+  f.querySelectorAll(".seg2").forEach(g=>{g.setAttribute("role","group");g.setAttribute("aria-label",name)})});
+document.querySelectorAll("#gearSegs button").forEach(b=>b.setAttribute("aria-label","Gear "+b.textContent));
+$("gearSegs").setAttribute("role","group");$("gearSegs").setAttribute("aria-label","Gear");$("motSegs").setAttribute("role","group");$("motSegs").setAttribute("aria-label","Motor mode");
+$("throttle").setAttribute("aria-label","Hold to ride (test)");
+S.volt=vFromSoc(100);buildStyle();applyAll();setLive(false);renderHistory();
+{let [h,sub]=location.hash.slice(1).split("/");if(!ORDER.includes(h)){try{h=sessionStorage.getItem("g2dash:tab")||""}catch(e){}sub=null}
+  const saved=JSON.parse(JSON.stringify(stacks));ORDER.forEach(t=>stacks[t]=[]);
+  try{history.replaceState({v:"dash"},"","#dash")}catch(e){}
+  if(ORDER.includes(h)&&h!=="dash"){show(h);const subs=sub?[sub]:(saved[h]||[]);subs.forEach(x=>{if(TITLES[x])openSub(x)})}else scroller.scrollTop=scrollPos.dash||0}
+$("abBack").onclick=closeSub;
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!sheetOpen&&stacks[curView].length)closeSub()});
+let scT=null;scroller.addEventListener("scroll",()=>{clearTimeout(scT);scT=setTimeout(()=>{scrollPos[screenOf(curView)]=scroller.scrollTop;try{sessionStorage.setItem("g2dash:scroll",JSON.stringify(scrollPos))}catch(e){}},150)},{passive:true});
+document.querySelector(".tabs").addEventListener("keydown",e=>{const i=ORDER.indexOf(curView);if(e.key==="ArrowRight"||e.key==="ArrowDown"){e.preventDefault();show(ORDER[(i+1)%3]);$("tab-"+curView).focus()}
+  if(e.key==="ArrowLeft"||e.key==="ArrowUp"){e.preventDefault();show(ORDER[(i+2)%3]);$("tab-"+curView).focus()}});requestAnimationFrame(tick);
+window.addEventListener("resize",drawGraph);
+})();
+</script>
+</body>
+</html>

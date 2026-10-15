@@ -1,0 +1,18 @@
+{
+  "name": "G2 Dash",
+  "short_name": "G2 Dash",
+  "description": "Live e-scooter dashboard for VESC controllers: speed, battery, gears, speed limit and ride history.",
+  "id": "/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#05080A",
+  "theme_color": "#05080A",
+  "categories": ["navigation", "utilities", "sports"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

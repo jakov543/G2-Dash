@@ -1,0 +1,19 @@
+{
+  "appId": "com.bandera.g2dash",
+  "appName": "G2 Dash",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#05080A"
+  },
+  "plugins": {
+    "BluetoothLe": {
+      "displayStrings": {
+        "scanning": "Looking for your scooter…",
+        "cancel": "Cancel",
+        "availableDevices": "Scooters nearby",
+        "noDeviceFound": "No scooter found"
+      }
+    }
+  }
+}
